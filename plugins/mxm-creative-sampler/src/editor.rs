@@ -844,6 +844,8 @@ mod tests {
             // happened; this asserts what the gesture *did*, so the write has to land.
             struct Applying;
             impl nice_plug::context::gui::GuiContextInner for Applying {
+                // A test double has no host to ask for a restart (nice-plug 0.4).
+                fn request_restart(&self) {}
                 fn plugin_api(&self) -> nice_plug::prelude::PluginApi {
                     nice_plug::prelude::PluginApi::Clap
                 }
@@ -915,6 +917,8 @@ mod tests {
     }
 
     impl nice_plug::context::gui::GuiContextInner for Ledger {
+        // A test double has no host to ask for a restart (nice-plug 0.4).
+        fn request_restart(&self) {}
         fn plugin_api(&self) -> nice_plug::prelude::PluginApi {
             nice_plug::prelude::PluginApi::Clap
         }
@@ -1899,6 +1903,8 @@ mod tests {
     }
 
     impl nice_plug::context::gui::GuiContextInner for Witness {
+        // A test double has no host to ask for a restart (nice-plug 0.4).
+        fn request_restart(&self) {}
         fn plugin_api(&self) -> nice_plug::prelude::PluginApi {
             nice_plug::prelude::PluginApi::Clap
         }

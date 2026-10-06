@@ -117,7 +117,7 @@ join them if a test here loaded another product's bundle (none does since the sp
 Each folder with an `AGENTS.md` owns its contents; the index is below.
 
 **Dependencies are pinned exactly and `Cargo.lock` is committed.** The kit comes from mxm-kit at
-`v0.3.1` (the tag in `Cargo.toml`), another product's crates from its repository at a tag, and nice-plug and
+`v0.4.0` (the tag in `Cargo.toml`), another product's crates from its repository at a tag, and nice-plug and
 egui-baseview from their MXM forks (`[patch.crates-io]`).
 
 **Two tiers of tests.** `cargo test` builds the plugin and its DSP only — the loop for a

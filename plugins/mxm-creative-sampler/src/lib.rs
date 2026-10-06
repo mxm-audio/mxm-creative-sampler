@@ -24,11 +24,24 @@ pub mod wav_loop;
 
 use asset::AssetBank;
 use mxm_creative_sampler_dsp::{Activity, Character, Engine, Note, Params as DspParams};
+use nice_plug::midi::{Channel, Key, VoiceID};
 use nice_plug::prelude::*;
 use params::MxmCreativeSamplerParams;
 use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::sync::Arc;
+
+/// A note's identity in the shape the voice logic was written for. nice-plug 0.4 types it
+/// (`VoiceID`, `Channel`, `Key`, each with a wildcard); 0.3 handed over a host's wildcard (-1) as
+/// 255 and a missing voice id as `None`. Converting here keeps every note decision, and every
+/// recorded render, exactly what it was before the upgrade.
+fn legacy_note(voice_id: VoiceID, channel: Channel, key: Key) -> (Option<i32>, u8, u8) {
+    (
+        voice_id.id(),
+        channel.number().unwrap_or(u8::MAX),
+        key.number().unwrap_or(u8::MAX),
+    )
+}
 
 const MAX_BLOCK_SIZE: usize = 64;
 const NUM_CHANNELS: usize = 16;
@@ -292,10 +305,11 @@ impl MxmCreativeSampler {
             NoteEvent::NoteOn {
                 voice_id,
                 channel,
-                note,
+                key,
                 velocity,
                 ..
             } if velocity.is_finite() && velocity > 0.0 => {
+                let (voice_id, channel, note) = legacy_note(voice_id, channel, key);
                 let params = self.next_params();
                 self.engine.note_on(
                     Note {
@@ -312,36 +326,42 @@ impl MxmCreativeSampler {
             NoteEvent::NoteOn {
                 voice_id,
                 channel,
-                note,
+                key,
                 velocity,
                 ..
             } if velocity.is_finite() => {
+                let (voice_id, channel, note) = legacy_note(voice_id, channel, key);
                 self.engine
                     .note_off(voice_id.map(|id| id as u32), channel, note);
             }
             NoteEvent::NoteOff {
                 voice_id,
                 channel,
-                note,
+                key,
                 ..
-            } => self
-                .engine
-                .note_off(voice_id.map(|id| id as u32), channel, note),
+            } => {
+                let (voice_id, channel, note) = legacy_note(voice_id, channel, key);
+                self.engine
+                    .note_off(voice_id.map(|id| id as u32), channel, note)
+            }
             NoteEvent::Choke {
                 voice_id,
                 channel,
-                note,
+                key,
                 ..
-            } => self
-                .engine
-                .choke(voice_id.map(|id| id as u32), channel, note),
+            } => {
+                let (voice_id, channel, note) = legacy_note(voice_id, channel, key);
+                self.engine
+                    .choke(voice_id.map(|id| id as u32), channel, note)
+            }
             NoteEvent::PolyTuning {
                 voice_id,
                 channel,
-                note,
+                key,
                 tuning,
                 ..
             } if tuning.is_finite() => {
+                let (voice_id, channel, note) = legacy_note(voice_id, channel, key);
                 let bend = self.applied_bends[channel as usize % NUM_CHANNELS];
                 self.engine.set_note_tuning(
                     voice_id.and_then(|id| u32::try_from(id).ok()),
@@ -369,10 +389,11 @@ impl MxmCreativeSampler {
             NoteEvent::PolyPressure {
                 voice_id,
                 channel,
-                note,
+                key,
                 pressure,
                 ..
             } if pressure.is_finite() => {
+                let (voice_id, channel, note) = legacy_note(voice_id, channel, key);
                 self.engine.set_pressure(
                     voice_id.and_then(|id| u32::try_from(id).ok()),
                     channel,
@@ -383,10 +404,11 @@ impl MxmCreativeSampler {
             NoteEvent::PolyVolume {
                 voice_id,
                 channel,
-                note,
+                key,
                 gain,
                 ..
             } if gain.is_finite() => {
+                let (voice_id, channel, note) = legacy_note(voice_id, channel, key);
                 self.engine.set_expression_gain(
                     voice_id.and_then(|id| u32::try_from(id).ok()),
                     channel,
@@ -397,10 +419,11 @@ impl MxmCreativeSampler {
             NoteEvent::PolyPan {
                 voice_id,
                 channel,
-                note,
+                key,
                 pan,
                 ..
             } if pan.is_finite() => {
+                let (voice_id, channel, note) = legacy_note(voice_id, channel, key);
                 self.engine.set_expression_pan(
                     voice_id.and_then(|id| u32::try_from(id).ok()),
                     channel,
@@ -734,6 +757,8 @@ mod routing_timing_tests {
     struct ApplyingHost;
 
     impl nice_plug::context::gui::GuiContextInner for ApplyingHost {
+        // A test double has no host to ask for a restart (nice-plug 0.4).
+        fn request_restart(&self) {}
         fn plugin_api(&self) -> PluginApi {
             PluginApi::Clap
         }
@@ -917,9 +942,9 @@ mod performance_tests {
     fn note_on(key: u8) -> NoteEvent<()> {
         NoteEvent::NoteOn {
             timing: 0,
-            voice_id: None,
-            channel: 0,
-            note: key,
+            voice_id: VoiceID::Wildcard,
+            channel: Channel::Number(0),
+            key: Key::Number(key),
             velocity: 1.0,
         }
     }
