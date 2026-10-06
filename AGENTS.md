@@ -127,7 +127,7 @@ is a separate package so the fast tier never builds the player.
 ## Windows, Linux and macOS — all three, always
 
 **An absolute requirement.** Everything here runs on all three; a change that works on one and
-breaks another is a broken change. CI builds and tests on all three, on release tags (see
+breaks another is a broken change. CI builds and tests on all three, on `v*` tags (see
 *Verification*).
 
 - **Anything platform-specific is `cfg`-gated with every arm implemented**, never one arm and a
@@ -170,9 +170,9 @@ cargo xtask bundle mxm-creative-sampler --release
 cargo test -p mxm-creative-sampler-host-tests            # the slow tier: through MXM Player
 ```
 
-CI runs the same on Windows, macOS and Linux, but only on a `v*` release tag or when started by
-hand (the owner, 2026-10-06). Before a push, run the first three on Windows and again on Linux (in
-WSL); macOS is checked by CI.
+CI runs the same on Windows, macOS and Linux, but only on a `v*` tag or when started by
+hand (the owner, 2026-10-06). Before a push, run the first three on Windows; Linux and macOS
+are checked later, together.
 
 # Child DOX Index
 
