@@ -150,9 +150,9 @@ impl ShapeChoice {
 
 /// Which converter the voice's DAC is. See [`mxm_creative_sampler_dsp::ConverterType`].
 ///
-/// **Named for the machines, not for the mathematics.** `docs/oscillators/14-samplers.md` §14.1: the
-/// vintage DAC names are companding parts rather than resolutions, and the card already reads in the
-/// numbers those machines were sold on.
+/// **Named for the machines, not for the mathematics.** mxm-kit's `docs/oscillators/14-samplers.md`
+/// §14.1: the vintage DAC names are companding parts rather than resolutions, and the card already
+/// reads in the numbers those machines were sold on.
 #[derive(Enum, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConverterChoice {
     #[id = "linear"]
@@ -976,8 +976,8 @@ impl Default for MxmCreativeSamplerParams {
             )
             .with_step_size(1.0)
             // Smoothed because it scales a held bend into every voice's pitch: a range edit under a
-            // held bend would otherwise be a pitch step (`docs/code-review-notes.md` §2). The 20 ms
-            // matches `mxm-mono-02` and `mxm-mono-08`.
+            // held bend would otherwise be a pitch step (mxm-kit's `docs/code-review-notes.md` §2).
+            // The 20 ms matches `mxm-mono-02` and `mxm-mono-08`.
             .with_smoother(SmoothingStyle::Linear(20.0))
             .with_unit(" st")
             .with_value_to_string(formatters::v2s_f32_rounded(0)),
@@ -1365,7 +1365,7 @@ mod tests {
         }
     }
 
-    /// One trip through the host, as `vendor/nice-plug`'s CLAP wrapper makes it: the CLAP value is
+    /// One trip through the host, as the nice-plug fork's CLAP wrapper makes it: the CLAP value is
     /// the normalized value times the step count, the text carries the unit, and the parsed text
     /// comes back through the parameter's normalized conversion before it is formatted again.
     /// Returns the failure, if the text changed or did not parse.

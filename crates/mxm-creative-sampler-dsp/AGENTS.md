@@ -184,7 +184,9 @@ cargo run -p mxm-creative-sampler-dsp --example creative_sampler_render_demo --r
 cargo run -p mxm-creative-sampler-dsp --example measure_readers --release
 ```
 
-Linux and macOS cannot be verified on the Windows development machine.
+Linux and macOS cannot be verified on the Windows development machine. *Since the split
+(2026-10-06):* Linux is checked in WSL before a push, and CI builds and tests Windows, macOS and
+Linux on `v*` release tags or when started by hand (root `AGENTS.md`, *Verification*).
 
 # Child DOX Index
 

@@ -360,8 +360,8 @@ impl Routes {
     /// host automating it, or a preset load, moves the smoother's *target* and leaves its current
     /// value wherever the last live sample left it. Resuming from there ramps the route in from a
     /// stale depth over a span set by how long it was absent — the host's buffer sizes deciding a
-    /// sound. `docs/code-review-notes.md` §7; `plugins/mxm-mono-pr1/src/routes.rs`'s `topology_from`
-    /// is the same rule on that instrument.
+    /// sound. mxm-kit's `docs/code-review-notes.md` §7; mxm-mono-pr1's
+    /// `plugins/mxm-mono-pr1/src/routes.rs`'s `topology_from` is the same rule on that instrument.
     ///
     /// `previous` is the routing the last interval ran, which the caller keeps across buffers.
     #[must_use]
@@ -506,9 +506,9 @@ fn presence(target: usize, source: usize) -> BoolParam {
 /// A pair's depth. **Signed and drawn bipolar**, because its centre is *no modulation*.
 ///
 /// A half-filled unipolar track would read as "half on" when it means "off" — recorded as a shipped
-/// defect once already in `plugins/mxm-mono-01/src/editor/binding.rs`. It is the collection's one
-/// route parameter (`mxm_modulation_params::reading`), starting where the compiled Init patch puts
-/// it, and it reads as [`reach`] says.
+/// defect once already in mxm-mono-01's `plugins/mxm-mono-01/src/editor/binding.rs`. It is the
+/// collection's one route parameter (`mxm_modulation_params::reading`), starting where the compiled
+/// Init patch puts it, and it reads as [`reach`] says.
 fn amount(target: usize, source: usize) -> FloatParam {
     reading::amount_param_at(
         amount_name(target, source),
@@ -780,8 +780,9 @@ mod tests {
     ///
     /// An absent pair contributes nothing whatever its amount holds, so a controller knob bound to
     /// the amount of a route Init does not wire would turn and do nothing. A presence may be bound
-    /// either way, because turning it on is what creates the route. `docs/code-review-notes.md` §7;
-    /// `plugins/mxm-mono-00/src/routes.rs` holds the same check.
+    /// either way, because turning it on is what creates the route. mxm-kit's
+    /// `docs/code-review-notes.md` §7; mxm-mono-00's `plugins/mxm-mono-00/src/routes.rs` holds the
+    /// same check.
     #[test]
     fn a_control_map_role_never_points_at_a_dead_route() {
         let text = include_str!("../control-map.json");

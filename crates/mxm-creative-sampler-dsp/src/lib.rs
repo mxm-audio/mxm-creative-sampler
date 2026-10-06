@@ -311,8 +311,9 @@ impl Default for LayerParams {
 
 /// Which converter the voice's DAC is, which is a **distortion character and not a bit depth**.
 ///
-/// `docs/oscillators/14-samplers.md` §14.1: the vintage sampler DAC names — Emu II, AM6070 — are
-/// companding parts rather than resolutions, and §14.2 measures why that is the whole difference.
+/// mxm-kit's `docs/oscillators/14-samplers.md` §14.1: the vintage sampler DAC names — Emu II,
+/// AM6070 — are companding parts rather than resolutions, and §14.2 measures why that is the whole
+/// difference.
 /// A linear converter degrades one-for-one with level, so at −36 dB an 8-bit linear converter sits
 /// at −15.2 dB of junk and by −54 dB **the signal is gone entirely**: every sample is smaller than
 /// one step and rounds to zero. A companding one holds about −36 dB across a 30 dB span of input
@@ -2855,7 +2856,7 @@ impl ResolvedCharacter {
     fn convert(&self, value: Stereo) -> Stereo {
         // **Companding happens around the quantiser, not instead of it.** The steps stay uniform;
         // what changes is the domain they are uniform in, which is the whole mechanism — see
-        // `ConverterType` and `docs/oscillators/14-samplers.md` §14.2.
+        // `ConverterType` and mxm-kit's `docs/oscillators/14-samplers.md` §14.2.
         let companding = self.converter_type == ConverterType::Companding;
         let (left, right) = if companding {
             (compand(value.left), compand(value.right))
@@ -5547,7 +5548,8 @@ mod tests {
     }
 
     /// **A backward source that starts being read after a long gap reads zero, not a value from
-    /// before the gap** — `crates/mxm-modulation/AGENTS.md`, *A gated publication owes a `clear`*.
+    /// before the gap** — mxm-kit's `crates/mxm-modulation/AGENTS.md`, *A gated publication owes a
+    /// `clear`*.
     ///
     /// A layer's audio publishes only while some route reads it, and publishes after every target
     /// has read, so a route from it is one sample late by construction. Remove the route from a
@@ -6010,7 +6012,8 @@ mod tests {
     }
 
     /// **Companding holds its signal-to-junk ratio where linear collapses**, which is the entire
-    /// reason `docs/oscillators/14-samplers.md` §14.8 names µ-law as the one to implement.
+    /// reason mxm-kit's `docs/oscillators/14-samplers.md` §14.8 names µ-law as the one to
+    /// implement.
     ///
     /// §14.2 measured a 440 Hz sine at 8 bits: linear sits near −49 dB at full scale and falls to
     /// −15 dB by −36 dBFS, while µ-law holds near −36 dB across that span. This reproduces the

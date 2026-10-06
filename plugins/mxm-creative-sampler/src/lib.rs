@@ -34,8 +34,8 @@ const MAX_BLOCK_SIZE: usize = 64;
 const NUM_CHANNELS: usize = 16;
 
 /// The developer channel's control changes, answered only when [`DEV_CC_ENV`] was set as the instance
-/// was made (`plugins/AGENTS.md`, *A developer channel in every editor*). CC 119 is a view address,
-/// CC 117 the preset browser, CC 116 a theme applied and never saved.
+/// was made (mxm-kit's `docs/plugin-conventions.md`, *A developer channel in every editor*). CC 119
+/// is a view address, CC 117 the preset browser, CC 116 a theme applied and never saved.
 const DEV_VIEW_CC: u8 = 119;
 /// Answered with nothing: this editor has no expander to open.
 const DEV_DISCLOSURE_CC: u8 = 118;
@@ -596,10 +596,11 @@ impl Plugin for MxmCreativeSampler {
         // **Presences once per callback, and that is already sample-accurate.**
         //
         // `SAMPLE_ACCURATE_AUTOMATION` is `true` below, and the wrapper honours it by consuming the
-        // parameter events itself and **splitting the outer buffer at each one** before calling this
-        // (`vendor/nice-plug/src/wrapper/clap/wrapper.rs`, `handle_in_events_until`). So every call
-        // begins on a parameter boundary with the new values already applied, and a presence written
-        // at a nonzero offset starts its own callback rather than waiting for the next one.
+        // parameter events itself and **splitting the outer buffer at each one** before calling
+        // this (the nice-plug fork's `src/wrapper/clap/wrapper.rs`, `handle_in_events_until`). So
+        // every call begins on a parameter boundary with the new values already applied, and a
+        // presence written at a nonzero offset starts its own callback rather than waiting for the
+        // next one.
         //
         // **The event loop below is note events**, which is why reading topology against *it* was
         // the wrong mechanism: it was extra work keyed off the wrong thing. The engine still rebuilds
@@ -968,10 +969,10 @@ mod performance_tests {
     }
 
     /// **A Bend range edited under a held bend ramps the pitch; it never steps it, and where the
-    /// blocks fall changes nothing** (audit D11; `docs/code-review-notes.md` §2, *smooth the mutable
-    /// scale*). Voices carry the bend as an accumulated tuning, so the range reaches them as deltas;
-    /// read once per callback, a range edit arrived as one ten-semitone delta on the callback's
-    /// first sample.
+    /// blocks fall changes nothing** (audit D11; mxm-kit's `docs/code-review-notes.md` §2, *smooth
+    /// the mutable scale*). Voices carry the bend as an accumulated tuning, so the range reaches
+    /// them as deltas; read once per callback, a range edit arrived as one ten-semitone delta on
+    /// the callback's first sample.
     ///
     /// The pitch is read off the voice after every sample, and the render is repeated in blocks of
     /// irregular sizes, which must agree to the bit — a smoother advanced per block, or a delta
@@ -1095,11 +1096,11 @@ mod performance_tests {
     }
 
     /// **A CC panic ends the notes and leaves the controllers where the player left them** (audit
-    /// D12; `docs/code-review-notes.md` §2). The bender, the wheel and channel pressure are
-    /// positions a controller sends only when they move, and CC 120 or 123 moves none of them.
-    /// The engine's panic returned all three sources to neutral while the plugin kept the bend
-    /// it tunes new notes by, so a note after the panic was pitched by the bend while every route
-    /// from Bend read zero, and the wheel and pressure were lost until they next moved.
+    /// D12; mxm-kit's `docs/code-review-notes.md` §2). The bender, the wheel and channel pressure
+    /// are positions a controller sends only when they move, and CC 120 or 123 moves none of them.
+    /// The engine's panic returned all three sources to neutral while the plugin kept the bend it
+    /// tunes new notes by, so a note after the panic was pitched by the bend while every route from
+    /// Bend read zero, and the wheel and pressure were lost until they next moved.
     ///
     /// The oracle is a twin that panicked first and received the same controller positions after:
     /// the two must render the same note to the bit, for both control changes. A third instance

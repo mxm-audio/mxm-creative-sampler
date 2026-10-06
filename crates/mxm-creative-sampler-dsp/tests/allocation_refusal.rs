@@ -1,5 +1,5 @@
 //! **A `Sample` refuses a buffer it cannot reserve instead of aborting its host** (audit D14;
-//! `docs/code-review-notes.md` §1).
+//! mxm-kit's `docs/code-review-notes.md` §1).
 //!
 //! `Sample::new` sizes its analysis buffers from the source, and the plugin builds a `Sample` from
 //! restored state, a preset and an import. A bounded source still asks for megabytes, and an

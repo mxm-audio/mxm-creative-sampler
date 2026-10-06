@@ -331,10 +331,10 @@ fn struck_source() -> Sample {
 
 /// **The reference this change is measured against: the splice the shipped reader used to make.**
 ///
-/// Two heads, one fixed window, each re-anchoring to the playhead the moment its age runs out —
-/// no correlation search and no onset map. It is implemented here rather than kept in the crate
-/// because `docs/oscillators/AGENTS.md`'s rule is the right one: a candidate that is not shipped
-/// lives in the harness, so the two are measured through the same code path.
+/// Two heads, one fixed window, each re-anchoring to the playhead the moment its age runs out — no
+/// correlation search and no onset map. It is implemented here rather than kept in the crate
+/// because mxm-kit's `docs/oscillators/AGENTS.md` has the right rule: a candidate that is not
+/// shipped lives in the harness, so the two are measured through the same code path.
 ///
 /// Linear interpolation on both sides, deliberately. The shipped reader interpolates with a
 /// sixteen-tap windowed sinc and this one cannot, so matching the *interpolator* would confuse the

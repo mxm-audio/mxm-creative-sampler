@@ -26,9 +26,9 @@ const NOT_ENOUGH_MEMORY: &str =
 /// Reserves exactly `additional` more elements, or refuses.
 ///
 /// **Every buffer sized by a payload, a preset or an imported file is reserved here** (audit D14;
-/// `docs/code-review-notes.md` §1). The frame cap bounds a layer at 43.95 MiB of frames, and a cap
-/// does not make that allocation succeed: an infallible one that fails aborts the host. `what` names
-/// the buffer for the refusal tests.
+/// mxm-kit's `docs/code-review-notes.md` §1). The frame cap bounds a layer at 43.95 MiB of frames,
+/// and a cap does not make that allocation succeed: an infallible one that fails aborts the host.
+/// `what` names the buffer for the refusal tests.
 fn reserve<T>(buffer: &mut Vec<T>, additional: usize, what: &'static str) -> Result<(), String> {
     if refused_for_test(what) {
         return Err(NOT_ENOUGH_MEMORY.to_owned());
@@ -1176,11 +1176,12 @@ fn prepare(
 /// The file's audio, canonical, and the loop it carries when it carries a usable one.
 ///
 /// **Any format the collection's decoder reads** — WAV, AIFF, FLAC, ALAC, MP3, AAC in M4A and Ogg
-/// Vorbis, judged by its content rather than its extension (`crates/mxm-audio-file-decode`). The
-/// instrument's policy stays here: more than [`MAX_FRAMES_PER_LAYER`] frames is refused, the first two
-/// channels are kept and mono is duplicated, and the audio is quantised once to canonical stereo i16.
-/// Integer PCM arrives scaled by `2^(bits−1)`, the rule this import used when hound read it, so a WAV
-/// imports to the same canonical state it did before.
+/// Vorbis, judged by its content rather than its extension (mxm-kit's
+/// `crates/mxm-audio-file-decode`). The instrument's policy stays here: more than
+/// [`MAX_FRAMES_PER_LAYER`] frames is refused, the first two channels are kept and mono is
+/// duplicated, and the audio is quantised once to canonical stereo i16. Integer PCM arrives scaled
+/// by `2^(bits−1)`, the rule this import used when hound read it, so a WAV imports to the same
+/// canonical state it did before.
 fn decode_wav(path: &Path) -> Result<(EncodedSample, Option<crate::wav_loop::FileLoop>), String> {
     use mxm_audio_file_decode::{AtLimit, Container, Error, Keep, Limits};
     let decoded = mxm_audio_file_decode::decode_file(
@@ -2011,8 +2012,9 @@ mod tests {
     }
 
     /// **A host state restore whose buffer cannot be reserved is rejected whole and keeps the sound
-    /// that was playing** (audit D14; `docs/code-review-notes.md` §1). The frame cap bounds each
-    /// layer, but a bounded allocation still fails, and an infallible one that fails aborts the host.
+    /// that was playing** (audit D14; mxm-kit's `docs/code-review-notes.md` §1). The frame cap
+    /// bounds each layer, but a bounded allocation still fails, and an infallible one that fails
+    /// aborts the host.
     #[test]
     fn a_refused_reservation_rejects_a_restored_state_whole_and_keeps_the_previous_one() {
         let prior = layered(1_000, 2_000);

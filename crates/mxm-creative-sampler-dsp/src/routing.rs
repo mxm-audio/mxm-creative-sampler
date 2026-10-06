@@ -365,8 +365,8 @@ impl Graph {
     /// **backward** route added to a sounding voice (either layer's audio, which publishes after
     /// every target has read) would then read that ancient value for exactly one sample, and how
     /// ancient would depend on how the host split its buffers. `mxm_modulation::SourceFrame::clear`
-    /// makes the first read a deterministic zero instead; `crates/mxm-modulation/AGENTS.md`, *A gated
-    /// publication owes a `clear`*.
+    /// makes the first read a deterministic zero instead; mxm-kit's
+    /// `crates/mxm-modulation/AGENTS.md`, *A gated publication owes a `clear`*.
     pub fn set_topology(&mut self, routing: &Routing) {
         for (target, live) in self.live.iter_mut().enumerate() {
             live.build(&routing.present[target]);

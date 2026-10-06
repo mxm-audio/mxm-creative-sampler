@@ -2052,7 +2052,7 @@ mod tests {
 
     /// **The developer channel reaches every category's first card and the Parameters surface, and
     /// leaving that surface restores a musician page; CC 117 and CC 116 reach the preset browser and
-    /// the theme** (`plugins/AGENTS.md`, *A developer channel in every editor*).
+    /// the theme** (mxm-kit's `docs/plugin-conventions.md`, *A developer channel in every editor*).
     ///
     /// Driven through the telemetry slots the plugin's CC arms fill, on the real panel. Categories
     /// are checked at the minimum window, where a page holds few enough cards that landing on the

@@ -189,8 +189,10 @@ clap-validator validate target/bundled/mxm-creative-sampler.clap
 structural states ([NOTES.md § Editor tree checks](NOTES.md#editor-tree-checks-and-review-pictures)).
 Review pictures: `MXM_PICTURES=after cargo test -p mxm-creative-sampler --lib tree_pictures -- --ignored`.
 
-Player restore and malformed-state coverage belongs to MXM Player (`mxm-audio/mxm-player`); native
-file drop and real-DAW operation remain manual gates.
+Player restore and malformed-state coverage runs through MXM Player in `host-tests/tests/behaviour.rs`
+(`cargo test -p mxm-creative-sampler-host-tests`; until 2026-10-05 it was the monorepo's
+`apps/mxm-player/tests/mxm_creative_sampler_behaviour.rs`); native file drop and real-DAW operation
+remain manual gates.
 
 # Child DOX Index
 

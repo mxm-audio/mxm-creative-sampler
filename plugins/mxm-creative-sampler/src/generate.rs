@@ -3,7 +3,7 @@
 //! **One additive engine, seventeen spectral recipes.** Every source here is the same loop — sum
 //! partials whose amplitudes move as the sample plays — differing only in what a recipe says
 //! partial `n`'s amplitude is at position `t`.
-//! [`../../../docs/oscillators/11-additive-resynthesis.md`](../../../docs/oscillators/11-additive-resynthesis.md)
+//! mxm-kit's [`docs/oscillators/11-additive-resynthesis.md`](https://github.com/mxm-audio/mxm-kit/blob/main/docs/oscillators/11-additive-resynthesis.md)
 //! §11.1 is the argument for that shape: *"There is no 'sawtooth' in the code — a sawtooth is what
 //! you get when the amplitudes happen to be `1/k`. Every spectral shape costs the same."*
 //!
@@ -19,7 +19,7 @@
 //!   carriers, and `nothing_lands_above_the_band_limit` measures the guard band instead of assuming
 //!   it.
 //! - **It is true spectral morphing.**
-//!   [`../../../docs/oscillators/09-wavetable.md`](../../../docs/oscillators/09-wavetable.md) is
+//!   mxm-kit's [`docs/oscillators/09-wavetable.md`](https://github.com/mxm-audio/mxm-kit/blob/main/docs/oscillators/09-wavetable.md) is
 //!   blunt that the obvious alternative is not: *"Amplitude crossfading is not spectral morphing.
 //!   Mixing table A and table B at 50/50 gives you the sum of two spectra, not a spectrum halfway
 //!   between them"*, and *"the null is worst where the tables are most similar."* Moving the

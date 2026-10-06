@@ -1,9 +1,9 @@
 //! The grains, drawn over the waveform they are reading.
 //!
 //! Plugin-local, following `mxm-grain-fx`'s buffer timeline and `mxm-chorus-06`'s Sweep. Not a
-//! reusable type and not `crates/ui`'s: design system §13 keeps a widget out of the shared crate
-//! until a second instrument needs it, and this one has no meaning away from the waveform it is
-//! painted on.
+//! reusable type and not mxm-kit's `crates/ui`: design system §13 keeps a widget out of the shared
+//! crate until a second instrument needs it, and this one has no meaning away from the waveform it
+//! is painted on.
 //!
 //! **A separate plot was the wrong answer.** The first attempt drew time against source position on
 //! a canvas of its own under the grain knobs, the way `mxm-grain-fx` draws its buffer. The owner's

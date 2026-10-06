@@ -772,8 +772,8 @@ pub(crate) fn card(
         // **This is not an advanced corner, it is the reason the instrument exists**: the four
         // stages are the card. **Jitter sits on its own line**, under the stages whose clock it
         // unsteadies: it is *when* they sample rather than what they do. **No prose under the
-        // knobs** (the owner's ruling): the facts live in `AGENTS.md` and
-        // `docs/oscillators/14-samplers.md` §14.6.
+        // knobs** (the owner's ruling): the facts live in this plugin's `AGENTS.md` (*Converter*,
+        // with the detail in its `NOTES.md`) and mxm-kit's `docs/oscillators/14-samplers.md` §14.6.
         5 => stack(vec![
             switch_leaf(params, Switch::ConverterType),
             knob_row(
@@ -1631,11 +1631,11 @@ const CHIP_WIDTH: f32 = 150.0;
 
 /// A file name shortened from the middle, keeping both ends.
 ///
-/// **Truncate, not extend.** `crates/ui/src/control.rs` records the rule and why it exists: a label
-/// that asks for more width than its card has does not wrap, it pushes `min_rect` out, and the card
-/// grows sideways over its neighbour. Cards are laid out by taffy from a fixed floor with
-/// `flex_shrink: 0`, so the overflow paints straight through whatever card is next — which is
-/// exactly what a 70-character sample-library name did to the Reader card.
+/// **Truncate, not extend.** mxm-kit's `crates/ui/src/control.rs` records the rule and why it
+/// exists: a label that asks for more width than its card has does not wrap, it pushes `min_rect`
+/// out, and the card grows sideways over its neighbour. Cards are laid out by taffy from a fixed
+/// floor with `flex_shrink: 0`, so the overflow paints straight through whatever card is next —
+/// which is exactly what a 70-character sample-library name did to the Reader card.
 ///
 /// **The middle goes, not the tail**, because a library name carries meaning at both ends: the
 /// instrument at the front and the key, tempo or take at the back. `SIG_GV_75_vibraphone_…_Bbmin.wav`
@@ -2212,10 +2212,11 @@ fn overlap_reading(params: &MxmCreativeSamplerParams, layer: usize) -> (String, 
 /// One target's route rows and the affordance that adds another.
 ///
 /// **Routing belongs under the thing it affects**, never in a detached footer — the ruling
-/// `plugins/mxm-mono-00/AGENTS.md` records and design system §7.4 makes normative. The rows, the
-/// border rules and the `‹ modulate ›` menu all come from `mxm_modulation_params`, so every editor
-/// in the collection draws this the same way: an unrouted target draws **no group at all**, the menu
-/// sits **outside** the group, and a row ends in a remove cross rather than a switch.
+/// mxm-mono-00's `plugins/mxm-mono-00/AGENTS.md` records and design system §7.4 makes normative.
+/// The rows, the border rules and the `‹ modulate ›` menu all come from `mxm_modulation_params`, so
+/// every editor in the collection draws this the same way: an unrouted target draws **no group at
+/// all**, the menu sits **outside** the group, and a row ends in a remove cross rather than a
+/// switch.
 fn route_stack(
     ui: &mut Ui,
     tokens: &Tokens,
@@ -2661,7 +2662,7 @@ mod floor_tests {
 
     /// **The widest card must fit the narrowest window**, or it is drawn past the right edge and
     /// cannot be reached: the flow ships `Scroll::Vertical`, which has no horizontal scroll to get
-    /// to it. `crates/ui/src/flow.rs` states that trade-off on `Scroll`.
+    /// to it. mxm-kit's `crates/ui/src/flow.rs` states that trade-off on `Scroll`.
     #[test]
     fn the_widest_card_fits_the_minimum_window() {
         let params = MxmCreativeSamplerParams::default();

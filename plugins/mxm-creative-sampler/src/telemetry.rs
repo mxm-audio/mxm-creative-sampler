@@ -38,8 +38,9 @@ pub struct Telemetry {
     /// Developer requests, each taken once by the editor: a CC 119 view address, a CC 117 browser
     /// open or close, and a CC 116 theme index. [`NO_REQUEST`] means none is pending.
     ///
-    /// **No CC 118 slot**, because this editor has no expander to open; `plugins/AGENTS.md`'s shape
-    /// for a plugin without one is to answer it with nothing.
+    /// **No CC 118 slot**, because this editor has no expander to open; the shape in mxm-kit's
+    /// `docs/plugin-conventions.md` (*A developer channel in every editor*) for a plugin without
+    /// one is to answer it with nothing.
     dev_view: AtomicU8,
     dev_browser: AtomicU8,
     dev_theme: AtomicU8,

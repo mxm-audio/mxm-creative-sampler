@@ -172,7 +172,7 @@ a test.
 ### A payload the frame cap admits can still be refused, and is refused whole
 
 **The cap bounds a layer; it does not make its allocation succeed** (audit D14,
-`docs/code-review-notes.md` §1). At 5,760,000 frames a layer is 43.95 MiB of frames and 29.30 MiB of
+mxm-kit's [`docs/code-review-notes.md`](https://github.com/mxm-audio/mxm-kit/blob/main/docs/code-review-notes.md) §1). At 5,760,000 frames a layer is 43.95 MiB of frames and 29.30 MiB of
 base64, and an infallible allocation that fails aborts the host. So every buffer a restored state, a
 preset or an import sizes is reserved through `asset::reserve`/`reserve_text` (`try_reserve_exact`),
 and `Sample::new` reserves its analysis the same way (`SampleError::Allocation`). A refusal returns
@@ -455,7 +455,7 @@ for CC 120 and CC 123 against a twin that received the same positions after its 
 Channel pitch bend spans the **Bend range** parameter, 0–24 semitones, and updates voices already
 held without erasing their per-note offsets. Voices carry accumulated deltas, so a range edited
 under a held wheel is applied as the difference between what the wheel now means and what was
-already applied. **The range is a signal, not a setting** (`docs/code-review-notes.md` §2): it is
+already applied. **The range is a signal, not a setting** (mxm-kit's [`docs/code-review-notes.md`](https://github.com/mxm-audio/mxm-kit/blob/main/docs/code-review-notes.md) §2): it is
 smoothed over 20 ms, as `mxm-mono-02` and `mxm-mono-08` do, and `lib.rs::follow_bend_range` applies
 the smoothed value once per sample — in inert spans too while it ramps, so a note started after
 the edit begins where a sounding one would be. Read once per `process` call, a range edited under a
@@ -1081,7 +1081,9 @@ fully-routed card is allowed to scroll, or that the source list is shorter, and 
 
 ### A developer channel, off unless the environment asks for it
 
-`plugins/AGENTS.md`'s channel, in the collection's shape: `MXM_DEV_CC` read once into `dev_cc`
+The channel of [`plugins/AGENTS.md`](../AGENTS.md) (in full: mxm-kit's
+[`docs/plugin-conventions.md`, *A developer channel in every editor*](https://github.com/mxm-audio/mxm-kit/blob/main/docs/plugin-conventions.md#a-developer-channel-in-every-editor)),
+in the collection's shape: `MXM_DEV_CC` read once into `dev_cc`
 when an instance is made, four `MidiCC` arms guarded by it, request slots on `Telemetry` taken once,
 and the editor honouring them at the top of `panel`, after `hold` and before the cursor moves.
 
@@ -1380,7 +1382,7 @@ set **once per block** by `Engine::set_topology`, because comparing fifty-five p
 and the answer cannot change inside a block. **The two are paired and neither replaces the other**:
 topology returns early when nothing moved, so it never delivers a changed depth.
 
-**A route that comes back owes two resets, and both are made** (`docs/code-review-notes.md` §7).
+**A route that comes back owes two resets, and both are made** (mxm-kit's [`docs/code-review-notes.md`](https://github.com/mxm-audio/mxm-kit/blob/main/docs/code-review-notes.md) §7).
 `Routes::routing_from` snaps a newly present route's amount smoother to its stored value, because an
 absent route's smoother is not advanced while a host write still moves its target — resuming it
 would ramp the route in from a stale depth over a span set by how long it was absent.
@@ -1488,7 +1490,8 @@ completed — a hundred seconds at the slowest rate this control offers.
 ### Validator quirks this plugin met
 
 **The validator is part of the gate, not an optional extra** — see the run rule in
-[`../AGENTS.md`](../AGENTS.md). The local regressions below preserve the product-specific seams it
+[`../AGENTS.md`](../AGENTS.md) (in full: mxm-kit's
+[`docs/plugin-conventions.md` § Verification](https://github.com/mxm-audio/mxm-kit/blob/main/docs/plugin-conventions.md#verification)). The local regressions below preserve the product-specific seams it
 exercises.
 
 - A `value_to_string` **without a matching `string_to_value`** breaks `param-conversions`. Six

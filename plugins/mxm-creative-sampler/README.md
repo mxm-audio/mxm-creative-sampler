@@ -4,7 +4,9 @@ A small-sample sound-design instrument: drop one audio file on A or B, play imme
 a patch with Repitch, Stretch or Grain playback, a modelled converter, any-to-any modulation and a
 multimode filter.
 
-Part of the [MXM Synth Collection](../../README.md). MIT licensed, CLAP only.
+Part of the MXM collection, the MXM Synth Collection monorepo until the split (2026-10-06): see
+the repository's [README](../../README.md). GPL-3.0-or-later — see the repository's
+[`LICENSE`](../../LICENSE). CLAP only.
 
 ## First playable workflow
 
@@ -39,7 +41,7 @@ depend on the original file or its format.
 audio; factory recipes and Init preserve it, and new audio is never heard through the patch it
 replaces. Parameter IDs, reader constants and mappings are provisional and wait on the owner
 listening gate in
-`plans/plan-mxm-creative-sampler.md` (`plans/plan-mxm-creative-sampler.md` in the private archive). **Nudge and the
+`plans/plan-mxm-creative-sampler.md` (in the private archive). **Nudge and the
 macro rail were removed** on the owner's ruling — a sequencer and a DAW both do that better — and the
 **modulation routing and the second LFO are built**, so the instrument no longer has fixed
 destinations to apologise for. Direct recording,
