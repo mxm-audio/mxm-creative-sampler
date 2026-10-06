@@ -1,0 +1,32 @@
+[package]
+name = "mxm-creative-sampler-dsp"
+description = "Framework-free DSP for mxm-creative-sampler: Repitch, Stretch and Grain sample voices"
+version.workspace = true
+edition.workspace = true
+rust-version = "1.88"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+# The routing half only, which carries no dependencies of its own and sits below this crate's floor,
+# so nothing here inherits the 1.95 GUI floor that `mxm-modulation-params` has. `cargo tree` on this
+# crate is the check, and it is the only thing that catches that floor leaking in.
+mxm-modulation = { workspace = true }
+
+[features]
+# `src/conformance.rs`: this instrument's routing as the modulation standard checks it. Enable it
+# only from `[dev-dependencies]` — the plugin's tests hold its route readings to it — so no shipped
+# graph carries it.
+conformance = ["mxm-modulation/conformance"]
+
+# Measurement rulers for the tests and listening harnesses only — a dev-dependency, outside the
+# shipped graph, with no dependencies of its own and at this same floor.
+[dev-dependencies]
+# The modulation standard's checks, for this crate's own tests (`src/conformance.rs`).
+mxm-modulation = { workspace = true, features = ["conformance"] }
+mxm-measure.workspace = true
+# Listening demos write through the collection's encoder and their tests read back through its
+# decoder. Test-only edges, so neither is in the shipped graph.
+mxm-audio-file.workspace = true
+mxm-audio-file-decode.workspace = true

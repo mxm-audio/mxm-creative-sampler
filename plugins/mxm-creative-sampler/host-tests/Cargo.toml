@@ -1,0 +1,21 @@
+[package]
+name = "mxm-creative-sampler-host-tests"
+description = "mxm-creative-sampler hosted by MXM Player: behaviour through the real host, against its release bundle. The slow tier: `cargo test -p mxm-creative-sampler` never builds the player."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+# The tests are in `tests/`; the library is empty and not test-built.
+test = false
+doctest = false
+
+[dev-dependencies]
+mxm-player.workspace = true
+mxm-player-harness.workspace = true
+mxm-audio-file.workspace = true
+serde_json = "=1.0.145"

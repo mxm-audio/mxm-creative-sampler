@@ -1,0 +1,722 @@
+{
+  "schema_version": 1,
+  "plugin": "dk.mxm.mxm-creative-sampler",
+  "name": "Drifting texture",
+  "category": "drone",
+  "_comment": "`v` is the value and is authoritative. `text` is this plugin's own formatting of it, kept so the file can be read, and is never loaded.",
+  "params": {
+    "aend": {
+      "v": 1.0,
+      "text": "100%"
+    },
+    "agrainrate": {
+      "v": 0.39765638,
+      "text": "18.0 /s"
+    },
+    "agrainshape": {
+      "v": 1.0,
+      "text": "Smooth"
+    },
+    "agrainsize": {
+      "v": 0.6420111,
+      "text": "0.220 s"
+    },
+    "agrainsync": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "alevel": {
+      "v": 0.6,
+      "text": "60%"
+    },
+    "aloop": {
+      "v": 0.5,
+      "text": "Forward"
+    },
+    "aloopcrossfade": {
+      "v": 0.0,
+      "text": "0.0 ms"
+    },
+    "aloopend": {
+      "v": 1.0,
+      "text": "100%"
+    },
+    "aloopstart": {
+      "v": 0.0,
+      "text": "0%"
+    },
+    "apan": {
+      "v": 0.5,
+      "text": "0%"
+    },
+    "apitchvar": {
+      "v": 0.40091178,
+      "text": "0.18 st"
+    },
+    "aposvar": {
+      "v": 0.55,
+      "text": "55%"
+    },
+    "areader": {
+      "v": 1.0,
+      "text": "Grain"
+    },
+    "areverse": {
+      "v": 0.0,
+      "text": "Forward"
+    },
+    "areversechance": {
+      "v": 0.0,
+      "text": "0%"
+    },
+    "aroot": {
+      "v": 0.37795275,
+      "text": "C3 · 48"
+    },
+    "ascanspeed": {
+      "v": 0.5175,
+      "text": "0.07x"
+    },
+    "astart": {
+      "v": 0.0,
+      "text": "0%"
+    },
+    "atiming": {
+      "v": 0.18500002,
+      "text": "19%"
+    },
+    "atranspose": {
+      "v": 0.5,
+      "text": "0.00 st"
+    },
+    "attack": {
+      "v": 0.49898756,
+      "text": "0.620 s"
+    },
+    "awidth": {
+      "v": 0.0,
+      "text": "0%"
+    },
+    "bend": {
+      "v": 1.0,
+      "text": "100%"
+    },
+    "bendrange": {
+      "v": 0.083333336,
+      "text": "2 st"
+    },
+    "bgrainrate": {
+      "v": 0.54135454,
+      "text": "40.0 /s"
+    },
+    "bgrainshape": {
+      "v": 1.0,
+      "text": "Smooth"
+    },
+    "bgrainsize": {
+      "v": 0.5051588,
+      "text": "0.100 s"
+    },
+    "bgrainsync": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "blevel": {
+      "v": 1.0,
+      "text": "100%"
+    },
+    "bloop": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "bloopcrossfade": {
+      "v": 0.0,
+      "text": "0.0 ms"
+    },
+    "bloopend": {
+      "v": 1.0,
+      "text": "100%"
+    },
+    "bloopstart": {
+      "v": 0.0,
+      "text": "0%"
+    },
+    "bpan": {
+      "v": 0.5,
+      "text": "0%"
+    },
+    "bpitchvar": {
+      "v": 0.482097,
+      "text": "0.42 st"
+    },
+    "bposvar": {
+      "v": 0.3,
+      "text": "30%"
+    },
+    "breader": {
+      "v": 1.0,
+      "text": "Grain"
+    },
+    "breverse": {
+      "v": 0.0,
+      "text": "Forward"
+    },
+    "breversechance": {
+      "v": 0.0,
+      "text": "0%"
+    },
+    "broot": {
+      "v": 0.47244096,
+      "text": "C4 · 60"
+    },
+    "bscanspeed": {
+      "v": 0.4525,
+      "text": "-0.19x"
+    },
+    "bstart": {
+      "v": 0.0,
+      "text": "0%"
+    },
+    "btiming": {
+      "v": 0.25,
+      "text": "25%"
+    },
+    "btranspose": {
+      "v": 0.75,
+      "text": "12.00 st"
+    },
+    "bwidth": {
+      "v": 0.0,
+      "text": "0%"
+    },
+    "converter": {
+      "v": 0.0,
+      "text": "16 bits"
+    },
+    "convtype": {
+      "v": 0.0,
+      "text": "Linear"
+    },
+    "cutoff": {
+      "v": 0.7838793,
+      "text": "7.2 kHz"
+    },
+    "decay": {
+      "v": 0.6223286,
+      "text": "1.500 s"
+    },
+    "drive": {
+      "v": 0.0,
+      "text": "0%"
+    },
+    "filtermode": {
+      "v": 0.33333334,
+      "text": "Low pass"
+    },
+    "glide": {
+      "v": 0.0,
+      "text": "0.000 s/oct"
+    },
+    "input": {
+      "v": 0.0,
+      "text": "+0.0 dB"
+    },
+    "jitter": {
+      "v": 0.0,
+      "text": "0%"
+    },
+    "lfo1shape": {
+      "v": 0.0,
+      "text": "Sine"
+    },
+    "lfo1sync": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "lfo2rate": {
+      "v": 0.38325262,
+      "text": "2.66 Hz"
+    },
+    "lfo2shape": {
+      "v": 0.2,
+      "text": "Triangle"
+    },
+    "lfo2sync": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "lforate": {
+      "v": 0.10037739,
+      "text": "0.07 Hz"
+    },
+    "master": {
+      "v": 0.8,
+      "text": "80%"
+    },
+    "mod_amp_bend": {
+      "v": 0.5,
+      "text": "+0 %"
+    },
+    "mod_amp_bendon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_amp_env": {
+      "v": 0.5,
+      "text": "+0 %"
+    },
+    "mod_amp_envon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_amp_key": {
+      "v": 0.5,
+      "text": "+0 %/oct"
+    },
+    "mod_amp_keyon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_amp_laya": {
+      "v": 0.5,
+      "text": "+0 %"
+    },
+    "mod_amp_layaon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_amp_layb": {
+      "v": 0.5,
+      "text": "+0 %"
+    },
+    "mod_amp_laybon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_amp_lfo1": {
+      "v": 0.5,
+      "text": "+0 %"
+    },
+    "mod_amp_lfo1on": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_amp_lfo2": {
+      "v": 0.5,
+      "text": "+0 %"
+    },
+    "mod_amp_lfo2on": {
+      "v": 1.0,
+      "text": "On"
+    },
+    "mod_amp_press": {
+      "v": 0.5,
+      "text": "+0 %"
+    },
+    "mod_amp_presson": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_amp_rnd": {
+      "v": 0.5,
+      "text": "+0 %"
+    },
+    "mod_amp_rndon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_amp_vel": {
+      "v": 0.675,
+      "text": "+35 %"
+    },
+    "mod_amp_velon": {
+      "v": 1.0,
+      "text": "On"
+    },
+    "mod_amp_wheel": {
+      "v": 0.5,
+      "text": "+0 %"
+    },
+    "mod_amp_wheelon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_cutoff_bend": {
+      "v": 0.5,
+      "text": "+0.00 oct"
+    },
+    "mod_cutoff_bendon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_cutoff_env": {
+      "v": 0.6938776,
+      "text": "+1.55 oct"
+    },
+    "mod_cutoff_envon": {
+      "v": 1.0,
+      "text": "On"
+    },
+    "mod_cutoff_key": {
+      "v": 0.5,
+      "text": "+0.00 oct/oct"
+    },
+    "mod_cutoff_keyon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_cutoff_laya": {
+      "v": 0.5,
+      "text": "+0.00 oct"
+    },
+    "mod_cutoff_layaon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_cutoff_layb": {
+      "v": 0.5,
+      "text": "+0.00 oct"
+    },
+    "mod_cutoff_laybon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_cutoff_lfo1": {
+      "v": 0.5,
+      "text": "+0.00 oct"
+    },
+    "mod_cutoff_lfo1on": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_cutoff_lfo2": {
+      "v": 0.627551,
+      "text": "+1.02 oct"
+    },
+    "mod_cutoff_lfo2on": {
+      "v": 1.0,
+      "text": "On"
+    },
+    "mod_cutoff_press": {
+      "v": 1.0,
+      "text": "+2.00 oct"
+    },
+    "mod_cutoff_presson": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_cutoff_rnd": {
+      "v": 0.5,
+      "text": "+0.00 oct"
+    },
+    "mod_cutoff_rndon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_cutoff_vel": {
+      "v": 0.5,
+      "text": "+0.00 oct"
+    },
+    "mod_cutoff_velon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_cutoff_wheel": {
+      "v": 0.5,
+      "text": "+0.00 oct"
+    },
+    "mod_cutoff_wheelon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_pitch_bend": {
+      "v": 0.5,
+      "text": "+0.00 st"
+    },
+    "mod_pitch_bendon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_pitch_env": {
+      "v": 0.5,
+      "text": "+0.00 st"
+    },
+    "mod_pitch_envon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_pitch_key": {
+      "v": 0.5,
+      "text": "+0.00 st/oct"
+    },
+    "mod_pitch_keyon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_pitch_laya": {
+      "v": 0.5,
+      "text": "+0.00 st"
+    },
+    "mod_pitch_layaon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_pitch_layb": {
+      "v": 0.5,
+      "text": "+0.00 st"
+    },
+    "mod_pitch_laybon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_pitch_lfo1": {
+      "v": 0.5,
+      "text": "+0.00 st"
+    },
+    "mod_pitch_lfo1on": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_pitch_lfo2": {
+      "v": 0.5,
+      "text": "+0.00 st"
+    },
+    "mod_pitch_lfo2on": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_pitch_press": {
+      "v": 0.5,
+      "text": "+0.00 st"
+    },
+    "mod_pitch_presson": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_pitch_rnd": {
+      "v": 0.5,
+      "text": "+0.00 st"
+    },
+    "mod_pitch_rndon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_pitch_vel": {
+      "v": 0.5,
+      "text": "+0.00 st"
+    },
+    "mod_pitch_velon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_pitch_wheel": {
+      "v": 0.5,
+      "text": "+0.00 st"
+    },
+    "mod_pitch_wheelon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_scana_bend": {
+      "v": 0.5,
+      "text": "+0.00x"
+    },
+    "mod_scana_bendon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_scana_env": {
+      "v": 0.5,
+      "text": "+0.00x"
+    },
+    "mod_scana_envon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_scana_key": {
+      "v": 0.5,
+      "text": "+0.00x/oct"
+    },
+    "mod_scana_keyon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_scana_laya": {
+      "v": 0.5,
+      "text": "+0.00x"
+    },
+    "mod_scana_layaon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_scana_layb": {
+      "v": 0.5,
+      "text": "+0.00x"
+    },
+    "mod_scana_laybon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_scana_lfo1": {
+      "v": 0.76,
+      "text": "+0.31x"
+    },
+    "mod_scana_lfo1on": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_scana_lfo2": {
+      "v": 0.58928573,
+      "text": "+0.18x"
+    },
+    "mod_scana_lfo2on": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_scana_press": {
+      "v": 0.5,
+      "text": "+0.00x"
+    },
+    "mod_scana_presson": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_scana_rnd": {
+      "v": 0.5,
+      "text": "+0.00x"
+    },
+    "mod_scana_rndon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_scana_vel": {
+      "v": 0.5,
+      "text": "+0.00x"
+    },
+    "mod_scana_velon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_scana_wheel": {
+      "v": 0.5,
+      "text": "+0.00x"
+    },
+    "mod_scana_wheelon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_scanb_bend": {
+      "v": 0.5,
+      "text": "+0.00x"
+    },
+    "mod_scanb_bendon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_scanb_env": {
+      "v": 0.5,
+      "text": "+0.00x"
+    },
+    "mod_scanb_envon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_scanb_key": {
+      "v": 0.5,
+      "text": "+0.00x/oct"
+    },
+    "mod_scanb_keyon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_scanb_laya": {
+      "v": 0.5,
+      "text": "+0.00x"
+    },
+    "mod_scanb_layaon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_scanb_layb": {
+      "v": 0.5,
+      "text": "+0.00x"
+    },
+    "mod_scanb_laybon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_scanb_lfo1": {
+      "v": 0.76,
+      "text": "-0.24x"
+    },
+    "mod_scanb_lfo1on": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_scanb_lfo2": {
+      "v": 0.5,
+      "text": "+0.00x"
+    },
+    "mod_scanb_lfo2on": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_scanb_press": {
+      "v": 0.5,
+      "text": "+0.00x"
+    },
+    "mod_scanb_presson": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_scanb_rnd": {
+      "v": 0.5,
+      "text": "+0.00x"
+    },
+    "mod_scanb_rndon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_scanb_vel": {
+      "v": 0.5,
+      "text": "+0.00x"
+    },
+    "mod_scanb_velon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "mod_scanb_wheel": {
+      "v": 0.5,
+      "text": "+0.00x"
+    },
+    "mod_scanb_wheelon": {
+      "v": 0.0,
+      "text": "Off"
+    },
+    "rate": {
+      "v": 0.3,
+      "text": "17.0 kHz"
+    },
+    "reconstruction": {
+      "v": 0.4,
+      "text": "40% stepped"
+    },
+    "release": {
+      "v": 0.555173,
+      "text": "1.900 s"
+    },
+    "resonance": {
+      "v": 0.14,
+      "text": "14%"
+    },
+    "sustain": {
+      "v": 0.72,
+      "text": "72%"
+    },
+    "voicemode": {
+      "v": 0.0,
+      "text": "Poly"
+    }
+  },
+  "state": null
+}

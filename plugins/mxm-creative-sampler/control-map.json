@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "_comment": [
+    "Which of mxm-creative-sampler's parameters fill the collection's control roles.",
+    "Roles come from docs/MXM_CONTROL_MAP.md, which is normative; parameters are named by",
+    "their permanent string id, never by display name.",
+    "",
+    "THIS MAP CLAIMS ONLY ROLES THE STANDARD ALREADY DECLARES, and that leaves the whole",
+    "instrument-defining surface off it: Blend, Character and its four stages, the region and",
+    "loop extents, scan speed, every grain control, and the four macros. An instrument map",
+    "naming a role the player's compiled standard does not declare is refused WHOLE - not just",
+    "that entry - so minting sampler roles here would cost this instrument every mapping below",
+    "on any player built before they existed. Section 9 of MXM_CONTROL_MAP.md is the rule, and",
+    "mxm-mono-03 and mxm-poly-06 ship restricted maps for the same reason.",
+    "",
+    "Sampler roles - a granular page with size, rate, position and pitch variation, and a source",
+    "page with the region extents - are a change to the standard, the compiled data and the",
+    "player together, made once and claimed here afterwards. They are not this file's to invent.",
+    "",
+    "NOTHING MASQUERADES. plan-mxm-creative-sampler.md section 3 forbids dressing the playback",
+    "mode up as osc1.wave or the grain controls as an effect's, so a role is filled only where",
+    "the parameter genuinely is the thing the role names. A layer's transpose is an oscillator's",
+    "tune and a layer's trim is a mixer source's level; a layer's playback mode is neither.",
+    "",
+    "The ids are provisional until the S3 listening gate, as plugins/mxm-creative-sampler/",
+    "AGENTS.md records. This file moves with them."
+  ],
+  "instruments": [
+    {
+      "clap_id": "dk.mxm.mxm-creative-sampler",
+      "name": "mxm-creative-sampler",
+      "params": {
+        "filter.cutoff": "cutoff",
+        "filter.resonance": "resonance",
+        "filter.drive": "drive",
+        "filter.mode": "filtermode",
+        "filter.env_amount": "mod_cutoff_env",
+        "amp_env.attack": "attack",
+        "amp_env.decay": "decay",
+        "amp_env.sustain": "sustain",
+        "amp_env.release": "release",
+        "lfo1.rate": "lforate",
+        "mixer.src1": "alevel",
+        "mixer.src2": "blevel",
+        "osc1.tune": "atranspose",
+        "osc2.tune": "btranspose",
+        "voice.glide": "glide",
+        "voice.bend_range": "bendrange",
+        "voice.note_priority": "voicemode",
+        "voice.output": "master"
+      }
+    }
+  ]
+}
