@@ -154,7 +154,8 @@ count assertion in `preset.rs`, the `Bound` list/card row in `sections.rs`, and 
   middle at `CHIP_NAME_BUDGET`; **never extend a user-provided name** (`elision_tests`). Each chip
   has its own `remove_mark` cross; never draw a glyph the font lacks.
 - The waveform is the region editor; a drag takes the circle it is pressed on and writes from its
-  first frame (`a_waveform_drag_writes_from_its_first_frame_and_always_closes`).
+  first frame (`a_waveform_drag_writes_from_its_first_frame_and_always_closes`). BACK during the
+  drag puts the handle back where it was taken from (`mxm_ui::drag`; the owner, 2026-10-08).
 - **No explanatory prose under the knobs**; facts go to tooltips. A route stack sits under the
   control it moves. Host names keep A/B; painted labels drop them (`binding::layer_label`). Open: a
   fully routed card scrolls at `REFERENCE`, so paging is tested at Init.

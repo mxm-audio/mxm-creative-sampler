@@ -2060,10 +2060,14 @@ fn region_handles(
             // threshold's worth — says which way it is going.
             let press = ui.input(|i| i.pointer.press_origin()).unwrap_or(pointer);
             let index = grab(circles, press, rect, pointer.x - press.x);
-            bound(&format!("{prefix}{}", Handle::ALL[index].suffix()), params)
-                .param
-                .begin(setter);
-            ui.ctx().data_mut(|d| d.insert_temp(handle_id(rect), index));
+            let handle = bound(&format!("{prefix}{}", Handle::ALL[index].suffix()), params);
+            handle.param.begin(setter);
+            // Where it was taken from, which BACK during the drag puts it back to.
+            let origin = handle.param.normalised();
+            ui.ctx().data_mut(|d| {
+                d.insert_temp(handle_id(rect), index);
+                d.insert_temp(origin_id(rect), origin);
+            });
             // **Held from this frame, not the next.** Memory is read before the grab, so the handle
             // taken now was only known next frame: this frame's movement wrote nothing, and a drag
             // that began and ended in one frame never closed the gesture it opened — a code review's
@@ -2079,12 +2083,21 @@ fn region_handles(
                 .set(setter, t);
         }
         if response.drag_stopped() {
+            let origin = ui.ctx().data_mut(|d| {
+                d.remove::<usize>(handle_id(rect));
+                d.remove_temp::<f32>(origin_id(rect))
+            });
             if let Some(index) = held {
-                bound(&format!("{prefix}{}", Handle::ALL[index].suffix()), params)
-                    .param
-                    .end(setter);
+                let handle = bound(&format!("{prefix}{}", Handle::ALL[index].suffix()), params);
+                // BACK during the drag cancels it (`mxm_ui::drag`): the handle goes back to where
+                // it was taken from, inside the gesture that is ending.
+                if let Some(origin) = origin
+                    && mxm_ui::drag::cancelled(ui.ctx(), response.id)
+                {
+                    handle.param.set(setter, origin);
+                }
+                handle.param.end(setter);
             }
-            ui.ctx().data_mut(|d| d.remove::<usize>(handle_id(rect)));
         }
     }
 
@@ -2137,6 +2150,11 @@ fn grab(circles: [Pos2; 4], press: Pos2, rect: Rect, heading: f32) -> usize {
 
 fn handle_id(rect: Rect) -> egui::Id {
     egui::Id::new(("mxm-region-handle", rect.left() as i32, rect.top() as i32))
+}
+
+/// Where the held handle's value stood when it was taken.
+fn origin_id(rect: Rect) -> egui::Id {
+    handle_id(rect).with("origin")
 }
 
 fn accept_drop(ui: &Ui, rect: Rect, layer: usize, load: &mut dyn FnMut(usize, PathBuf)) {
