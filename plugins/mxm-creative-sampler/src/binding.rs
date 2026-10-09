@@ -76,6 +76,7 @@ mod tests {
                 up: true,
                 coarse: false,
                 finer: false,
+                snap: false,
             },
         );
         let coarse = bound.next_value(
@@ -84,6 +85,7 @@ mod tests {
                 up: false,
                 coarse: true,
                 finer: false,
+                snap: false,
             },
         );
         assert!((fine - 61.0 * note).abs() < 1e-9, "a note up: {fine}");
