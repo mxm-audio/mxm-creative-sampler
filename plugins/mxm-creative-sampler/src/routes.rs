@@ -747,7 +747,7 @@ mod tests {
     /// and printed again, it is the same text — at amounts either side of zero, not only at the
     /// round numbers. `format!("{:.0}", v * 100.0)` printed `-0 %` for any amount in (−0.005, 0),
     /// which parses to zero and prints `0 %`; `clap-validator`'s `param-conversions` fails on that
-    /// whenever its grid lands in the sliver (`mxm_modulation_params::signed`).
+    /// whenever its grid lands in the sliver (`mxm_params::text::signed`).
     #[test]
     fn every_reading_survives_the_hosts_round_trip_a_rounded_zero_included() {
         let routes = Routes::default();

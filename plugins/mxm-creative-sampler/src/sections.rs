@@ -238,7 +238,7 @@ pub fn all_parameters(params: &MxmCreativeSamplerParams) -> Vec<Bound<'_>> {
             &params.cutoff,
             "The filter's cutoff: lower is darker.",
         )
-        .law(mxm_preset::StepLaw::Hertz),
+        .law(mxm_params::StepLaw::Hertz),
         Bound::new(
             "resonance",
             &params.resonance,
@@ -314,7 +314,7 @@ pub fn all_parameters(params: &MxmCreativeSamplerParams) -> Vec<Bound<'_>> {
             &params.bend_range,
             "Sets how far the pitch wheel moves a sounding note.",
         )
-        .law(mxm_preset::StepLaw::Semitones),
+        .law(mxm_params::StepLaw::Semitones),
     ]
 }
 
@@ -513,7 +513,7 @@ impl Switch {
         }
     }
 
-    fn param(self, params: &MxmCreativeSamplerParams) -> &dyn mxm_preset::ErasedParam {
+    fn param(self, params: &MxmCreativeSamplerParams) -> &dyn mxm_params::ErasedParam {
         match self {
             Self::Voices => &params.voice_mode,
             Self::Reader(0) => &params.a_reader,

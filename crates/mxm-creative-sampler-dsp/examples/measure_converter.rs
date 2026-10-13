@@ -73,6 +73,10 @@ fn sine(hz: f32) -> Sample {
 }
 
 /// Magnitude at one frequency, by Goertzel — cheaper than an FFT for a handful of probes.
+///
+/// **`|X|/N` in `f32`, not `mxm-measure`'s amplitude**, and kept: the figures quoted from this example
+/// in the sampler's AGENTS and `docs/oscillators/14-samplers.md` were taken with it. Moving it is a
+/// re-measurement, not a refactor.
 fn goertzel(v: &[f32], hz: f32, rate: f32) -> f32 {
     let k = TAU * hz / rate;
     let coeff = 2.0 * k.cos();

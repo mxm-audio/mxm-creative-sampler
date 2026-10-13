@@ -1463,7 +1463,7 @@ amounts are its starting values), with `reading::TIMES` for Scan speed's `x`.
 `every_route_parameter_says_what_the_dsp_does` holds every pair's travel and reading to
 `mxm_creative_sampler_dsp::conformance` (`mxm_plugin_test::routing_checks`).
 
-**A route's reading never prints a negative zero.** It formats through `mxm_modulation_params::signed`
+**A route's reading never prints a negative zero.** It formats through `mxm_params::text::signed`
 (mxm-kit's `crates/mxm-modulation-params/AGENTS.md`); the percentage it replaced printed `-0 %` for any amount
 in (−0.005, 0), which parses to zero and prints `0 %`, so the text did not survive the host's round
 trip. `every_reading_survives_the_hosts_round_trip_a_rounded_zero_included` walks all 55 amounts
@@ -1521,7 +1521,7 @@ five parameters that were not (audit D6), and the rules they taught are:
   cents now.
 - **No reading prints a negative zero.** Pan (`v2s_f32_percentage`) printed `-0%` and Scan speed
   `-0.00x` a hair below centre; `params::unsigned_zero` removes that sign and nothing else. The route
-  amounts' own rule is `mxm_modulation_params::signed` (*A route reads what its pair delivers*).
+  amounts' own rule is `mxm_params::text::signed` (*A route reads what its pair delivers*).
 
 `every_parameter_round_trips_its_own_text` holds it for every parameter in `param_map`, at three
 source rates, at the twenty-step grid, `clap-validator` 0.4.1's own grid, both sides of every branch

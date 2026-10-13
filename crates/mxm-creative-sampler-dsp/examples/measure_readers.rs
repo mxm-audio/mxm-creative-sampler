@@ -60,6 +60,9 @@ fn render(source: &Sample, reader: Reader, character: Character, key: u8) -> Vec
         .collect()
 }
 
+/// **Not `mxm_measure::spectrum::component_amplitude`, on purpose**: its phase is formed in `f32`, and
+/// the readings this crate's AGENTS quotes were taken with it. Moving to the shared ruler is a
+/// re-measurement, not a refactor.
 fn magnitude_at(signal: &[f32], hz: f32) -> f64 {
     let mut real = 0.0f64;
     let mut imaginary = 0.0f64;
@@ -72,12 +75,7 @@ fn magnitude_at(signal: &[f32], hz: f32) -> f64 {
 }
 
 fn rms(signal: &[f32]) -> f64 {
-    (signal
-        .iter()
-        .map(|sample| f64::from(*sample).powi(2))
-        .sum::<f64>()
-        / signal.len() as f64)
-        .sqrt()
+    mxm_measure::level::rms(signal).expect("a finite, non-empty render")
 }
 
 fn correlation(a: &[f32], b: &[f32]) -> f64 {

@@ -33,7 +33,7 @@ pub const DEFAULT_SOURCE_RATE: u32 = 48_000;
 /// `{:.N}` prints `-0` or `-0.00` for a value a hair below zero. A host parses that to zero and
 /// prints it unsigned, so the reading would not survive the host's round trip — and
 /// `clap-validator`'s `param-conversions` fails whenever its grid lands in the sliver. Only a
-/// reading that shows zero changes; `mxm_modulation_params::signed` is the same rule for a reading
+/// reading that shows zero changes; `mxm_params::text::signed` is the same rule for a reading
 /// that carries a `+`.
 fn unsigned_zero(text: String) -> String {
     match text.strip_prefix('-') {
@@ -1365,94 +1365,22 @@ mod tests {
         }
     }
 
-    /// One trip through the host, as the nice-plug fork's CLAP wrapper makes it: the CLAP value is
-    /// the normalized value times the step count, the text carries the unit, and the parsed text
-    /// comes back through the parameter's normalized conversion before it is formatted again.
-    /// Returns the failure, if the text changed or did not parse.
-    ///
-    /// # Safety
-    ///
-    /// `ptr` must point at a parameter that outlives the call.
-    unsafe fn host_round_trip(id: &str, ptr: ParamPtr, clap_value: f64) -> Option<String> {
-        unsafe {
-            let steps = ptr.step_count().unwrap_or(1);
-            let normalised = clap_value as f32 / steps as f32;
-            let first = ptr.normalized_value_to_string(normalised, true);
-            let Some(parsed) = ptr.string_to_normalized_value(&first) else {
-                return Some(format!("{id}: {first:?} does not parse"));
-            };
-            let back = parsed as f64 * steps as f64;
-            let second = ptr.normalized_value_to_string(back as f32 / steps as f32, true);
-            (second != first).then(|| {
-                format!(
-                    "{id} at plain {}: {first:?} came back {second:?}",
-                    ptr.preview_plain(normalised)
-                )
-            })
-        }
-    }
-
-    /// **Every parameter's text survives the host's normalized conversion unchanged** — not a list
-    /// of the ones someone remembered.
-    ///
-    /// `mxm-grain-fx` pinned the same property over a hand-written list, and that shape is why a
-    /// defect lived here: Direction shipped with a `value_to_string` and no reader, so
-    /// `param-conversions` walked 0.5152 to "Reverse", back through the default reader to 0.0, and
-    /// out again as "Forward". Walking [`Params::param_map`] asks the question of every parameter,
-    /// the 110 routing pairs and every one added later included.
-    ///
-    /// **Branch points, not only a grid.** On the twenty-step grid alone this passed Cutoff and
-    /// Sample rate switching unit at a raw boundary — a reading of `1.0 kHz` parses to a thousand
-    /// hertz whose normalized inverse lands under it — Root changing its note name at a raw half
-    /// note, and Pan and Scan speed printing a negative zero a hair below zero. A validator run
-    /// checks a grid of its own, so a clean run proves nothing about a sliver between its points.
-    ///
-    /// Probes, for every parameter and at three source rates (Sample rate's reading depends on the
-    /// loaded sample's): the twenty-step grid; `clap-validator` 0.4.1's own grid, whose size follows
-    /// the parameter count; both sides of every branch point in [`branch_plains`]; and a hair
-    /// either side of zero on a range that crosses it.
+    /// **Every parameter's text survives the host's round trip**, with the unit on, across the
+    /// collection's grids and switch points (`mxm_plugin_test::text_checks`) at three source rates,
+    /// because Sample rate's reading depends on the loaded sample's, plus both sides of every
+    /// branch point in [`branch_plains`].
     #[test]
-    fn every_parameter_round_trips_its_own_text() {
+    fn every_parameter_text_survives_the_hosts_round_trip() {
         let params = MxmCreativeSamplerParams::default();
-        let map = params.param_map();
-        let validator_points = 4000usize.div_ceil(map.len()).clamp(5, 100);
-        let mut failures = Vec::new();
         for source_rate in [DEFAULT_SOURCE_RATE, 44_100, 22_050] {
             params.source_rate.store(source_rate, Ordering::Relaxed);
-            for (id, ptr, _) in &map {
-                // SAFETY: `params` owns every parameter these pointers refer to and outlives the
-                // loop; this is the same access `param-conversions` makes through CLAP.
-                unsafe {
-                    let steps = ptr.step_count().unwrap_or(1) as f64;
-                    let mut probes: Vec<f64> = (0..=19).map(|i| steps * i as f64 / 19.0).collect();
-                    probes.extend(
-                        (0..validator_points)
-                            .map(|i| steps * (i as f64 / (validator_points - 1) as f64)),
-                    );
-                    let mut plains = branch_plains(id, source_rate as f32);
-                    let (low, high) = (ptr.preview_plain(0.0), ptr.preview_plain(1.0));
-                    if low.min(high) < 0.0 && low.max(high) > 0.0 {
-                        plains.extend([-1.0e-3, -1.0e-4, 0.0, 1.0e-4, 1.0e-3]);
-                    }
-                    probes.extend(
-                        plains
-                            .into_iter()
-                            .map(|plain| ptr.preview_normalized(plain) as f64 * steps),
-                    );
-                    failures.extend(probes.into_iter().filter_map(|value| {
-                        host_round_trip(id, *ptr, value).map(|f| format!("{source_rate} Hz: {f}"))
-                    }));
-                }
-            }
+            let boundaries: Vec<f32> = params
+                .param_map()
+                .iter()
+                .flat_map(|(id, _, _)| branch_plains(id, source_rate as f32))
+                .collect();
+            mxm_plugin_test::text_checks::every_text_round_trips(&params, &boundaries);
         }
-        // One line per parameter and source rate is enough to read; the count says the rest.
-        let total = failures.len();
-        failures.dedup_by(|b, a| a.split(" at plain").next() == b.split(" at plain").next());
-        assert!(
-            failures.is_empty(),
-            "{total} failures, first per parameter:\n{}",
-            failures.join("\n")
-        );
     }
 
     /// **Root holds cents without disturbing a whole-note Root** (D6). A whole note reads exactly as it

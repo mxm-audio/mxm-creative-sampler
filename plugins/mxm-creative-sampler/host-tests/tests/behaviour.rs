@@ -3,8 +3,6 @@
 //! Build first with `cargo xtask bundle mxm-creative-sampler --release`. These tests construct the
 //! same versioned payload the plugin writes, but link no sampler product code into the host.
 
-use mxm_player_harness::app_harness;
-
 use mxm_player::session::Session;
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
@@ -13,9 +11,7 @@ const PLUGIN: &str = "dk.mxm.mxm-creative-sampler";
 const SKIP: &str = "skipping: run `cargo xtask bundle mxm-creative-sampler --release`";
 
 fn bundle() -> Option<(PathBuf, PathBuf)> {
-    let dir = app_harness::any_bundled_dir()?;
-    let file = dir.join("mxm-creative-sampler.clap");
-    file.exists().then_some((dir, file))
+    mxm_player_harness::host_test::plugin_bundle("mxm-creative-sampler")
 }
 
 fn session(name: &str) -> Option<Session> {
@@ -296,19 +292,7 @@ fn malformed_embedded_audio_preserves_the_working_sound_and_patch() {
 
 /// Sets a parameter by its display name, as a position in its normalised range, and settles.
 fn set_param(session: &mut Session, name: &str, fraction: f64) {
-    let param = session
-        .state()
-        .param(name)
-        .unwrap_or_else(|| panic!("`{name}` is not a parameter"))
-        .clone();
-    let value = param.min + fraction * (param.max - param.min);
-    session
-        .app()
-        .engine_mut()
-        .push_gui_event(mxm_player::events::input::Payload::ParamValue {
-            param_id: param.id,
-            value,
-        });
+    mxm_player_harness::host_test::push_fraction(session, name, fraction);
     session.advance_blocks(4).expect("the session advances");
 }
 

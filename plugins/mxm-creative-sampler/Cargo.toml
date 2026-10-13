@@ -17,6 +17,7 @@ nice-plug-egui.workspace = true
 mxm-ui.workspace = true
 mxm-modulation-params = { workspace = true }
 mxm-preset.workspace = true
+mxm-params.workspace = true
 mxm-tempo.workspace = true
 egui.workspace = true
 mxm-creative-sampler-dsp.workspace = true

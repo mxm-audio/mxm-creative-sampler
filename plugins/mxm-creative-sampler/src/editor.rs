@@ -425,7 +425,7 @@ fn parameters_view(
                 None if id.starts_with("mod_") => {
                     Bound::new(id, param, "How far this route moves its target.").bipolar()
                 }
-                None => Bound::new(id, param, mxm_preset::ErasedParam::name(param)),
+                None => Bound::new(id, param, mxm_params::ErasedParam::name(param)),
             },
         )
         .collect();
@@ -625,16 +625,16 @@ fn write_arrival(
             &params.b_root,
         )
     };
-    let write = |param: &dyn mxm_preset::ErasedParam, normalised: f32| {
+    let write = |param: &dyn mxm_params::ErasedParam, normalised: f32| {
         param.begin(setter);
         param.set(setter, normalised);
         param.end(setter);
     };
-    write(start, mxm_preset::ErasedParam::default_normalised(start));
-    write(end, mxm_preset::ErasedParam::default_normalised(end));
+    write(start, mxm_params::ErasedParam::default_normalised(start));
+    write(end, mxm_params::ErasedParam::default_normalised(end));
     let (from, to) = arrived.loop_points.unwrap_or((
-        mxm_preset::ErasedParam::default_normalised(loop_start),
-        mxm_preset::ErasedParam::default_normalised(loop_end),
+        mxm_params::ErasedParam::default_normalised(loop_start),
+        mxm_params::ErasedParam::default_normalised(loop_end),
     ));
     write(loop_start, from);
     write(loop_end, to);
@@ -1170,7 +1170,7 @@ mod tests {
 
         // The control: a crop moved with no new source still ramps, so the check can see one.
         let host = Ledger::default();
-        mxm_preset::ErasedParam::set(&params.a_start, &ParamSetter::new(&host), 0.35);
+        mxm_params::ErasedParam::set(&params.a_start, &ParamSetter::new(&host), 0.35);
         plugin.render_block_for_test(&mut one.0, &mut one.1);
         assert_eq!(
             ramping(&params),
@@ -1214,7 +1214,7 @@ mod tests {
 
         // Layer B's crop is moving under automation when layer A receives a new source.
         let host = Ledger::default();
-        mxm_preset::ErasedParam::set(&params.b_start, &ParamSetter::new(&host), 0.35);
+        mxm_params::ErasedParam::set(&params.b_start, &ParamSetter::new(&host), 0.35);
         staged(&params, Arrival::File(Some(a_loop())));
         settle(
             &params,
@@ -2166,7 +2166,7 @@ mod tests {
         assert_eq!(view, PARAMETERS);
         // A flat list with no card to shorten a name: each parameter under its full name.
         for (id, param) in mxm_preset::Instrument::parameters(&params) {
-            let label = mxm_preset::ErasedParam::name(param).to_owned();
+            let label = mxm_params::ErasedParam::name(param).to_owned();
             assert!(
                 texts.contains(&label),
                 "the Parameters surface lacks {id} ({label})"
