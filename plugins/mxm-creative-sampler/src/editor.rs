@@ -143,6 +143,7 @@ impl NiceEguiApp for MxmCreativeSamplerApp {
         mxm_ui::theme::apply(&context);
         mxm_ui::typography::apply(&context);
         context.set_theme(mxm_ui::theme::preference());
+        mxm_ui::navigation::use_shared_keymap(&context);
         self.gui_context = Some(gui_context);
         // The default task is loading, even though category order still begins at Performance.
         mxm_ui::paging::editor::request_card(&context, mxm_ui::paging::Key(3));
