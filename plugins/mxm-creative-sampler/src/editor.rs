@@ -301,7 +301,7 @@ pub fn panel(
     // **The developer channel, before the cursor moves.** A category request lands on that
     // category's first card; 127 is the tabless Parameters surface. The paging renderer defers either
     // while `hold` says another surface owns the keyboard.
-    mxm_ui::paging::editor::developer_request(ui.ctx(), view, telemetry.take_view_request());
+    mxm_ui::paging::editor::developer_request(ui.ctx(), view, telemetry.dev.take_view());
     if *view == mxm_ui::paging::PARAMETERS {
         // No cards, so no cursor: stopped, or an invisible cursor left from the musician page — the
         // master output's card included — would keep the arrows its sliders need.
@@ -309,19 +309,20 @@ pub fn panel(
     } else {
         mxm_ui::navigation::paged_with_bar(ui.ctx(), nav, busy, &[crate::sections::MASTER]);
     }
-    if let Some(open) = telemetry.take_browser_request() {
+    if let Some(open) = telemetry.dev.take_browser() {
         presets.set_browser_open(open);
     }
     // Applied and never stored: a capture run must not rewrite the choice made in the app bar.
     if let Some(preference) = telemetry
-        .take_theme_request()
+        .dev
+        .take_theme()
         .and_then(mxm_ui::theme::from_index)
     {
         ui.ctx().set_theme(preference);
     }
     let tokens = tokens_for(ui);
-    let peak = telemetry.take_peak();
-    let clipped = telemetry.clipped();
+    let peak = telemetry.meter.take();
+    let clipped = telemetry.meter.clipped();
     mxm_ui::AppBar::new(crate::NAME).show_with(
         ui,
         &tokens,
@@ -346,7 +347,7 @@ pub fn panel(
         },
         |ui| {
             if mxm_ui::shell::level_meter(ui, &tokens, peak, clipped) {
-                telemetry.clear_clip();
+                telemetry.meter.clear_clip();
             }
             // **Design system §3.1 slot 6**: the master output control belongs beside the level and
             // clip indicator, not filed with voice allocation. It stays an ordinary host parameter
@@ -2139,7 +2140,7 @@ mod tests {
 
         // Tone, Generators, Modulators, Performance: each category's first card in authored order.
         for (request, first) in [(4u8, 6u64), (3, 3), (1, 1), (0, 0)] {
-            telemetry.request_view(request);
+            telemetry.dev.request_view(request);
             frames(minimum, &mut view, &mut presets);
             assert_eq!(view, 0, "category {request} left the musician pages");
             assert!(
@@ -2151,7 +2152,7 @@ mod tests {
         // Sequencers and Effects have no cards here, so asking for them moves nothing.
         for request in [2u8, 5] {
             let before = selected_page();
-            telemetry.request_view(request);
+            telemetry.dev.request_view(request);
             frames(minimum, &mut view, &mut presets);
             assert_eq!(
                 selected_page(),
@@ -2161,7 +2162,7 @@ mod tests {
         }
 
         let tall = egui::vec2(REFERENCE.0 as f32, 8_000.0);
-        telemetry.request_view(PARAMETERS as u8);
+        telemetry.dev.request_view(PARAMETERS as u8);
         let texts = frames(tall, &mut view, &mut presets);
         assert_eq!(view, PARAMETERS);
         // A flat list with no card to shorten a name: each parameter under its full name.
@@ -2183,7 +2184,7 @@ mod tests {
             "the Parameters surface has no cards, so nothing registers with the cursor"
         );
 
-        telemetry.request_view(0);
+        telemetry.dev.request_view(0);
         let texts = frames(tall, &mut view, &mut presets);
         assert_eq!(
             view, 0,
@@ -2198,7 +2199,7 @@ mod tests {
             "the musician page registers its controls with the cursor again"
         );
 
-        telemetry.request_theme(1);
+        telemetry.dev.request_theme(1);
         frames(tall, &mut view, &mut presets);
         assert_eq!(
             ctx.options(|options| options.theme_preference),
@@ -2206,10 +2207,10 @@ mod tests {
             "CC 116 value 1 did not apply dark"
         );
 
-        telemetry.request_browser(true);
+        telemetry.dev.request_browser(true);
         frames(tall, &mut view, &mut presets);
         assert!(presets.is_browser_open(), "CC 117 did not open the browser");
-        telemetry.request_browser(false);
+        telemetry.dev.request_browser(false);
         frames(tall, &mut view, &mut presets);
         assert!(
             !presets.is_browser_open(),

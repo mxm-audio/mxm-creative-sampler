@@ -451,6 +451,7 @@ impl MxmCreativeSampler {
                 ..
             } if self.dev_cc && value.is_finite() => self
                 .telemetry
+                .dev
                 .request_view((value.clamp(0.0, 1.0) * 127.0).round() as u8),
             NoteEvent::MidiCC {
                 cc: DEV_DISCLOSURE_CC,
@@ -460,13 +461,16 @@ impl MxmCreativeSampler {
                 cc: DEV_BROWSER_CC,
                 value,
                 ..
-            } if self.dev_cc && value.is_finite() => self.telemetry.request_browser(value >= 0.5),
+            } if self.dev_cc && value.is_finite() => {
+                self.telemetry.dev.request_browser(value >= 0.5)
+            }
             NoteEvent::MidiCC {
                 cc: DEV_THEME_CC,
                 value,
                 ..
             } if self.dev_cc && value.is_finite() => self
                 .telemetry
+                .dev
                 .request_theme((value.clamp(0.0, 1.0) * 127.0).round() as u8),
             // **CC 1, the mod wheel**, which this plugin did not read at all before the conversion.
             // Retained per channel and projected into each voice's frame, which is §4.1's *the same
@@ -1231,9 +1235,9 @@ mod tests {
         ] {
             plugin.handle_event(cc(number, value), [None, None]);
         }
-        assert_eq!(plugin.telemetry.take_view_request(), None);
-        assert_eq!(plugin.telemetry.take_browser_request(), None);
-        assert_eq!(plugin.telemetry.take_theme_request(), None);
+        assert_eq!(plugin.telemetry.dev.take_view(), None);
+        assert_eq!(plugin.telemetry.dev.take_browser(), None);
+        assert_eq!(plugin.telemetry.dev.take_theme(), None);
 
         plugin.dev_cc = true;
         for (number, value) in [
@@ -1245,18 +1249,18 @@ mod tests {
             plugin.handle_event(cc(number, value), [None, None]);
         }
         assert_eq!(
-            plugin.telemetry.take_view_request(),
+            plugin.telemetry.dev.take_view(),
             Some(mxm_ui::paging::PARAMETERS),
             "127 is the Parameters surface"
         );
-        assert_eq!(plugin.telemetry.take_browser_request(), Some(true));
+        assert_eq!(plugin.telemetry.dev.take_browser(), Some(true));
         assert_eq!(
-            plugin.telemetry.take_theme_request(),
+            plugin.telemetry.dev.take_theme(),
             Some(1),
             "1 is dark, as mxm_ui::theme::from_index reads it"
         );
         assert_eq!(
-            plugin.telemetry.take_view_request(),
+            plugin.telemetry.dev.take_view(),
             None,
             "a request is taken once"
         );
