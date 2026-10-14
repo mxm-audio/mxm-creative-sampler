@@ -358,14 +358,8 @@ mod tests {
     /// garbage, from a seeded stream so a failure is reproducible.
     #[test]
     fn a_chunk_list_that_lies_never_panics() {
-        let mut state = 0x9e37_79b9_7f4a_7c15u64;
-        let mut next = || {
-            state = state.wrapping_add(0x9e37_79b9_7f4a_7c15);
-            let mut z = state;
-            z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-            z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-            z ^ (z >> 31)
-        };
+        let mut rng = mxm_rng::SplitMix64::new(0x9e37_79b9_7f4a_7c15);
+        let mut next = || rng.next_u64();
         for _ in 0..2_000 {
             let mut bytes = wav(64);
             for _ in 0..(next() % 5) {
@@ -472,13 +466,10 @@ mod tests {
             );
         }
 
-        let mut state = 0x2545_f491_4f6c_dd1du64;
+        let mut rng = mxm_rng::Xorshift64::from_state(0x2545_f491_4f6c_dd1d);
         let noise: Vec<[f32; 2]> = (0..1_500)
             .map(|_| {
-                state ^= state << 13;
-                state ^= state >> 7;
-                state ^= state << 17;
-                let value = (state >> 40) as f32 / (1u64 << 24) as f32 - 0.5;
+                let value = rng.unit_f32() - 0.5;
                 [value, value]
             })
             .collect();

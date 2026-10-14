@@ -852,14 +852,11 @@ fn measure_crossfade() {
         RATE,
     )
     .unwrap();
-    let mut state = 0x2545_f491_4f6c_dd1du64;
+    let mut rng = mxm_rng::Xorshift64::from_state(0x2545_f491_4f6c_dd1d);
     let noise = Sample::new(
         (0..len)
             .map(|_| {
-                state ^= state << 13;
-                state ^= state >> 7;
-                state ^= state << 17;
-                let value = ((state >> 40) as f32 / 16_777_216.0 * 2.0 - 1.0) * 0.5;
+                let value = (rng.unit_f32() * 2.0 - 1.0) * 0.5;
                 [value, value]
             })
             .collect(),

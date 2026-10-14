@@ -10,6 +10,7 @@ pub mod routing;
 
 use core::f32::consts::{PI, TAU};
 use mxm_modulation::standard;
+use mxm_rng::{SplitMix64, map};
 
 pub const MAX_VOICES: usize = 8;
 
@@ -380,11 +381,8 @@ pub const JITTER_CELLS: f32 = 0.9;
 /// anything else, it is identical however the block is split, and it is reproducible across runs.
 #[inline]
 fn cell_wobble(cell: f32) -> f32 {
-    let mut z = (cell as i64 as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15);
-    z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-    z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-    z ^= z >> 31;
-    (z >> 40) as f32 / (1u32 << 24) as f32
+    let z = SplitMix64::mix((cell as i64 as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15));
+    map::unit_f32((z >> 32) as u32)
 }
 
 impl Default for Character {
@@ -668,15 +666,15 @@ impl GrainScheduler {
     }
 
     #[inline]
-    fn tick(&mut self, slot: f32, scatter: Scatter, rng: &mut u64) -> u32 {
+    fn tick(&mut self, slot: f32, scatter: Scatter, rng: &mut SplitMix64) -> u32 {
         let slot = slot.max(1.0);
         if self.slot_position >= self.slot_length {
             // Carry the overshoot so onsets do not drift against the sample clock, and adopt the
             // current control value here rather than mid-slot.
             self.slot_position -= self.slot_length;
             self.slot_length = slot;
-            self.offset = split_mix(rng) * scatter.jitter * slot;
-            self.suppressed = split_mix(rng) < scatter.handover;
+            self.offset = rng.unit_f32() * scatter.jitter * slot;
+            self.suppressed = rng.unit_f32() < scatter.handover;
             self.armed = true;
         }
         let mut starts = 0;
@@ -684,7 +682,7 @@ impl GrainScheduler {
             self.armed = false;
             starts += 1;
         }
-        if scatter.handover > 0.0 && split_mix(rng) < scatter.handover / slot {
+        if scatter.handover > 0.0 && rng.unit_f32() < scatter.handover / slot {
             starts += 1;
         }
         self.slot_position += 1.0;
@@ -933,7 +931,10 @@ struct Voice {
     layers: [LayerVoice; 2],
     envelope: Envelope,
     filters: [Svf; 2],
-    rng: u64,
+    /// The voice's stream: SplitMix64, whose fixed arithmetic and chronology make callback
+    /// partition irrelevant. The grain scheduler draws from it while the layer it schedules for is
+    /// mutably borrowed, which is why it is a field of its own.
+    rng: SplitMix64,
     /// This voice's own source frame and per-target route lists.
     ///
     /// **Per voice, which is `plan-modulation-routing.md` §4.1's rule**, and what keeps a latched
@@ -969,7 +970,7 @@ impl Default for Voice {
             layers: std::array::from_fn(|_| LayerVoice::default()),
             envelope: Envelope::default(),
             filters: [Svf::default(); 2],
-            rng: 0x6a09_e667_f3bc_c909,
+            rng: SplitMix64::new(0x6a09_e667_f3bc_c909),
             graph: routing::Graph::new(),
             random: 0.0,
             velocity: 1.0,
@@ -987,9 +988,12 @@ impl Voice {
         self.active = true;
         self.note = note;
         self.born = born;
-        self.rng ^= born.wrapping_mul(0x9e37_79b9_7f4a_7c15)
-            ^ ((note.key as u64) << 24)
-            ^ note.id.unwrap_or(0) as u64;
+        self.rng = SplitMix64::new(
+            self.rng.state()
+                ^ born.wrapping_mul(0x9e37_79b9_7f4a_7c15)
+                ^ ((note.key as u64) << 24)
+                ^ note.id.unwrap_or(0) as u64,
+        );
         self.random = Self::random_for(born, note.key);
         self.velocity = note.velocity;
         self.envelope.trigger();
@@ -1006,9 +1010,9 @@ impl Voice {
     /// press was given: a mono fallback restores a held press's draw, and it has to be the same
     /// number the voice had.
     fn random_for(born: u64, key: u8) -> f32 {
-        let mut seed =
+        let seed =
             born.wrapping_mul(0x9e37_79b9_7f4a_7c15) ^ ((key as u64) << 17) ^ 0xa5a5_5a5a_c3c3_3c3c;
-        standard::random(split_mix(&mut seed))
+        standard::random(SplitMix64::new(seed).unit_f32())
     }
 
     /// The pitch this voice is sounding right now, in MIDI semitones, glide included.
@@ -1031,7 +1035,8 @@ impl Voice {
         let looping =
             params.loop_mode != LoopMode::Off && reaches_loop(start, direction, region, 0.0);
         let stretch_frames = (STRETCH_WINDOW_S * host_rate).clamp(32.0, 32_768.0);
-        let stagger = (((self.rng >> 11) as u32 % 1_000) as f32 / 1_000.0 + index as f32 * 0.37)
+        let stagger = (((self.rng.state() >> 11) as u32 % 1_000) as f32 / 1_000.0
+            + index as f32 * 0.37)
             .fract()
             .clamp(0.0, 0.999);
         self.layers[index] = LayerVoice {
@@ -1987,27 +1992,12 @@ impl Voice {
     }
 
     fn random_unit(&mut self) -> f32 {
-        split_mix(&mut self.rng)
+        self.rng.unit_f32()
     }
 
     fn random_bipolar(&mut self) -> f32 {
         self.random_unit() * 2.0 - 1.0
     }
-}
-
-/// One draw from a voice's seeded stream.
-///
-/// Free rather than a method so the grain scheduler can draw from the same stream while the layer
-/// it schedules for is already mutably borrowed. SplitMix64: fixed arithmetic and chronology make
-/// callback partition irrelevant.
-#[inline]
-fn split_mix(state: &mut u64) -> f32 {
-    *state = state.wrapping_add(0x9e37_79b9_7f4a_7c15);
-    let mut z = *state;
-    z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-    z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-    z ^= z >> 31;
-    (z >> 40) as f32 / (1u32 << 24) as f32
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -4353,12 +4343,12 @@ pub enum LfoShape {
 ///
 /// **Global and free-running**, which is what the one this replaces was, and what makes two layers
 /// drift against each other rather than restart together on every note.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy)]
 struct Lfo {
     phase: f32,
     /// The value `SampleHold` is currently holding, redrawn when the phase wraps.
     held: f32,
-    rng: u64,
+    rng: SplitMix64,
     /// The stream's starting point, so a reset is a **reset** rather than one more draw.
     ///
     /// Without it `reset` advanced whatever state playing had left behind, so what the instrument
@@ -4372,7 +4362,7 @@ impl Lfo {
         let mut lfo = Self {
             phase: 0.0,
             held: 0.0,
-            rng: seed,
+            rng: SplitMix64::new(seed),
             seed,
         };
         lfo.reset();
@@ -4400,7 +4390,7 @@ impl Lfo {
         if advanced >= 1.0 {
             // One draw per cycle, taken on the wrap, so the held value changes at the rate the
             // control says rather than at some multiple of it.
-            self.held = split_mix(&mut self.rng) * 2.0 - 1.0;
+            self.held = self.rng.unit_f32() * 2.0 - 1.0;
         }
         self.phase = advanced.fract();
         value
@@ -4417,8 +4407,8 @@ impl Lfo {
         // **From the seed, not from wherever the stream had got to.** A reset must produce the same
         // instrument every time, and drawing from the live state made the first held value depend on
         // how long the last session played.
-        self.rng = self.seed;
-        self.held = split_mix(&mut self.rng) * 2.0 - 1.0;
+        self.rng = SplitMix64::new(self.seed);
+        self.held = self.rng.unit_f32() * 2.0 - 1.0;
     }
 }
 
@@ -4742,10 +4732,10 @@ impl Engine {
         // declared lifetime is the note's, and a mono phrase is a sequence of notes sharing one
         // voice — so carrying the old draw would make it per *phrase* instead.
         voice.random = {
-            let mut seed = self.chronology.wrapping_mul(0x9e37_79b9_7f4a_7c15)
+            let seed = self.chronology.wrapping_mul(0x9e37_79b9_7f4a_7c15)
                 ^ ((note.key as u64) << 17)
                 ^ 0xa5a5_5a5a_c3c3_3c3c;
-            standard::random(split_mix(&mut seed))
+            standard::random(SplitMix64::new(seed).unit_f32())
         };
         voice.glide = if sanitise(params.glide_s, 0.0) > 0.0 {
             (previous - note.key as f32 - sanitise(note.tuning, 0.0)).clamp(-128.0, 128.0)
@@ -5245,7 +5235,7 @@ impl Engine {
         self.voices
             .iter()
             .filter(|voice| voice.active)
-            .map(|voice| voice.rng)
+            .map(|voice| voice.rng.state())
             .fold(0, |acc, rng| acc ^ rng)
     }
 
@@ -7051,11 +7041,11 @@ mod tests {
         let silent = Sample::new(vec![[0.0, 0.0]; 48_000], 48_000.0).unwrap();
         assert!(detect_root(&silent, 0.0).is_none(), "silence got a pitch");
 
-        let mut rng = 0x1234_5678_9abc_def0u64;
+        let mut rng = SplitMix64::new(0x1234_5678_9abc_def0);
         let noise = Sample::new(
             (0..48_000)
                 .map(|_| {
-                    let value = split_mix(&mut rng) * 2.0 - 1.0;
+                    let value = rng.unit_f32() * 2.0 - 1.0;
                     [value * 0.4, value * 0.4]
                 })
                 .collect(),
@@ -7330,7 +7320,7 @@ mod tests {
 
         let run = |scatter: f32| {
             let mut scheduler = GrainScheduler::default();
-            let mut rng = 0x1234_5678_9abc_def0u64;
+            let mut rng = SplitMix64::new(0x1234_5678_9abc_def0);
             let mut counts = Vec::new();
             for _ in 0..slots {
                 let mut in_slot = 0;
@@ -8467,14 +8457,14 @@ mod tests {
     /// thousandths of a frame off its frame and every wrapped tap interpolated.
     #[test]
     fn loop_frames_survive_the_normalised_parameter() {
-        let mut state = 0x243f_6a88_85a3_08d3u64;
+        let mut state = SplitMix64::new(0x243f_6a88_85a3_08d3);
         for frames in [169usize, 1_025, 87_375, 1_048_577, 5_760_000] {
             let last = (frames - 1) as f32;
             let top = frames as u32 - 1;
             let mut pairs = vec![(0u32, top), (0, 1), (top - 1, top)];
             for _ in 0..4_000 {
-                let a = ((split_mix(&mut state) * last) as u32).min(top - 1);
-                let b = ((split_mix(&mut state) * last) as u32).min(top);
+                let a = ((state.unit_f32() * last) as u32).min(top - 1);
+                let b = ((state.unit_f32() * last) as u32).min(top);
                 pairs.push((a.min(b), a.max(b).max(a.min(b) + 1)));
             }
             for (from, to) in pairs {
@@ -9054,13 +9044,10 @@ mod tests {
         // **Declining is the half that keeps the fallback honest.** Noise and silence have no
         // period, and a track that invented one would aim the alignment search at an offset the
         // material does not support — worse than the blind range it replaced.
-        let mut state = 0x2545_f491_4f6c_dd1du64;
+        let mut rng = mxm_rng::Xorshift64::from_state(0x2545_f491_4f6c_dd1d);
         let noise: Vec<[f32; 2]> = (0..96_000)
             .map(|_| {
-                state ^= state << 13;
-                state ^= state >> 7;
-                state ^= state << 17;
-                let value = (state >> 40) as f32 / 8_388_608.0 - 1.0;
+                let value = rng.bipolar_f32();
                 [value * 0.4, value * 0.4]
             })
             .collect();
@@ -9434,13 +9421,8 @@ mod tests {
 
     #[test]
     fn no_random_parameter_combination_panics_the_engine() {
-        let mut state = 0x2545_f491_4f6c_dd1du64;
-        let mut next = move || {
-            state ^= state << 13;
-            state ^= state >> 7;
-            state ^= state << 17;
-            (state >> 40) as f32 / 16_777_216.0
-        };
+        let mut rng = mxm_rng::Xorshift64::from_state(0x2545_f491_4f6c_dd1d);
+        let mut next = move || rng.unit_f32();
         // **The shape the instrument actually starts on.** A sine mix has no onsets at all, so
         // `Sample::new` hands back an empty transient list and the whole splice path — the part
         // `Reader::Stretch` gained in S2 — is skipped before it begins. A band-limited saw has a

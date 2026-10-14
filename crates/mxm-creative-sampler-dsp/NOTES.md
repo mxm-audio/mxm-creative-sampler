@@ -36,8 +36,8 @@ examples. AGENTS.md is the contract; this file is the reference it links to.
 `plans/plan-modulation-routing.md` (in the private archive): a **source list**, a
 **target list**, each target's **full scale per route**, and the routes the init patch wires.
 The shared machinery is [`mxm-modulation`](https://github.com/mxm-audio/mxm-kit/blob/main/crates/mxm-modulation/AGENTS.md), which this crate takes as
-its **one dependency** — the routing half only, zero-dependency and MSRV 1.87, so this crate does not
-inherit the 1.95 GUI floor. `cargo tree -p mxm-creative-sampler-dsp` is the check.
+one of its **two dependencies** — the routing half only, zero-dependency and MSRV 1.87 like the other,
+`mxm-rng`, so this crate does not inherit the 1.95 GUI floor. `cargo tree -p mxm-creative-sampler-dsp` is the check.
 
 **Eleven sources, five targets.** Order is load-bearing: a route whose source comes earlier reads
 this sample's value, later reads last sample's — the unit delay that makes a player-made cycle

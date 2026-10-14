@@ -13,9 +13,10 @@ evidence: `research:interfaces/creative-sampler-workflows.md`.
 This is an original design, not a machine copy. Every constant is chosen for this implementation
 and remains provisional until the playable listening gate.
 
-**One dependency, deliberately**: [`mxm-modulation`](https://github.com/mxm-audio/mxm-kit/blob/main/crates/mxm-modulation/AGENTS.md), the routing
-half only — zero-dependency itself and MSRV **1.87**, so this crate does not inherit the 1.95
-GUI floor that `mxm-modulation-params` carries. `cargo tree -p mxm-creative-sampler-dsp` is the
+**Two dependencies, deliberately**: [`mxm-modulation`](https://github.com/mxm-audio/mxm-kit/blob/main/crates/mxm-modulation/AGENTS.md), the routing
+half only, and [`mxm-rng`](https://github.com/mxm-audio/mxm-kit/blob/main/crates/mxm-rng/AGENTS.md), the generators — each zero-dependency
+and MSRV **1.87**, so this crate does not inherit the 1.95 GUI floor that `mxm-modulation-params`
+carries. `cargo tree -p mxm-creative-sampler-dsp` is the
 check, and it is the only thing that catches that floor leaking in.
 
 The reasoning, history and measurements behind every rule here are in [NOTES.md](NOTES.md); read

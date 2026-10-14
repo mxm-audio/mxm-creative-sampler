@@ -13,6 +13,8 @@ repository.workspace = true
 # so nothing here inherits the 1.95 GUI floor that `mxm-modulation-params` has. `cargo tree` on this
 # crate is the check, and it is the only thing that catches that floor leaking in.
 mxm-modulation = { workspace = true }
+# The voices' streams and the cell wobble's hash: dependency-free and below this floor too.
+mxm-rng = { workspace = true }
 
 [features]
 # `src/conformance.rs`: this instrument's routing as the modulation standard checks it. Enable it
