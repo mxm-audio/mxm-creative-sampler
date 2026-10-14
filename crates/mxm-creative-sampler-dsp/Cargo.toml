@@ -12,6 +12,8 @@ repository.workspace = true
 # The routing half only, which carries no dependencies of its own and sits below this crate's floor,
 # so nothing here inherits the 1.95 GUI floor that `mxm-modulation-params` has. `cargo tree` on this
 # crate is the check, and it is the only thing that catches that floor leaking in.
+# The finite guard; dependency-free and below this floor too.
+mxm-dsp = { workspace = true }
 mxm-modulation = { workspace = true }
 # The voices' streams and the cell wobble's hash: dependency-free and below this floor too.
 mxm-rng = { workspace = true }

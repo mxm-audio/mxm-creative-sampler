@@ -142,7 +142,7 @@ breaks another is a broken change. CI builds and tests on all three when started
 
 | Crate | MSRV | Why |
 |---|---|---|
-| `crates/mxm-creative-sampler-dsp` | **1.88** | Immutable samples, eight voices and the bounded Repitch, Stretch and Grain readers. **Two runtime dependencies**, `mxm-modulation` and `mxm-rng`, both dependency-free and below this floor — the modulation conversion and the shared generators added them, and `cargo tree` on this crate is what keeps the GUI floor out. **1.88 rather than 1.87** because `lib.rs` uses a `let` chain, which stabilised there |
+| `crates/mxm-creative-sampler-dsp` | **1.88** | Immutable samples, eight voices and the bounded Repitch, Stretch and Grain readers. **Three runtime dependencies**, `mxm-modulation`, `mxm-rng` and `mxm-dsp`, all dependency-free and below this floor — the modulation conversion, the shared generators and the shared guards added them, and `cargo tree` on this crate is what keeps the GUI floor out. **1.88 rather than 1.87** because `lib.rs` uses a `let` chain, which stabilised there |
 | `plugins/mxm-creative-sampler` | **1.95** | Its native-drop editor pulls in egui; depends on `mxm-creative-sampler-dsp`, which stays lower |
 
 ## Licensing

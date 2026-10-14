@@ -9,6 +9,7 @@ pub mod conformance;
 pub mod routing;
 
 use core::f32::consts::{PI, TAU};
+use mxm_dsp::guard::finite_or;
 use mxm_modulation::standard;
 use mxm_rng::{SplitMix64, map};
 
@@ -591,7 +592,7 @@ struct Scatter {
 
 impl Scatter {
     fn from_control(scatter: f32) -> Self {
-        let s = sanitise(scatter, 0.0).clamp(0.0, 1.0);
+        let s = finite_or(scatter, 0.0).clamp(0.0, 1.0);
         if s <= HANDOVER_AT {
             Self {
                 jitter: (s / HANDOVER_AT) * MAX_JITTER,
@@ -855,10 +856,10 @@ impl Envelope {
     }
 
     fn next(&mut self, params: &Params, sample_rate: f32) -> f32 {
-        let attack = sanitise(params.attack_s, 0.005).clamp(0.000_05, 30.0);
-        let decay = sanitise(params.decay_s, 0.18).clamp(0.000_05, 30.0);
-        let release = sanitise(params.release_s, 0.35).clamp(0.000_05, 60.0);
-        let sustain = sanitise(params.sustain, 0.82).clamp(0.0, 1.0);
+        let attack = finite_or(params.attack_s, 0.005).clamp(0.000_05, 30.0);
+        let decay = finite_or(params.decay_s, 0.18).clamp(0.000_05, 30.0);
+        let release = finite_or(params.release_s, 0.35).clamp(0.000_05, 60.0);
+        let sustain = finite_or(params.sustain, 0.82).clamp(0.0, 1.0);
         match self.stage {
             EnvelopeStage::Idle => return 0.0,
             EnvelopeStage::Attack => {
@@ -901,11 +902,11 @@ impl Svf {
         if params.filter_mode == FilterMode::Off {
             return input;
         }
-        let drive = 1.0 + sanitise(params.filter_drive, 0.0).clamp(0.0, 1.0) * 12.0;
+        let drive = 1.0 + finite_or(params.filter_drive, 0.0).clamp(0.0, 1.0) * 12.0;
         let driven = soft_clip(input * drive) / soft_clip(drive);
-        let cutoff = sanitise(cutoff_hz, 18_000.0).clamp(10.0, sample_rate * 0.45);
+        let cutoff = finite_or(cutoff_hz, 18_000.0).clamp(10.0, sample_rate * 0.45);
         let g = (PI * cutoff / sample_rate).tan().min(12.0);
-        let resonance = sanitise(params.resonance, 0.1).clamp(0.0, 0.98);
+        let resonance = finite_or(params.resonance, 0.1).clamp(0.0, 0.98);
         let k = 2.0 - resonance * 1.9;
         let a1 = 1.0 / (1.0 + g * (g + k));
         let v1 = a1 * (self.ic1 + g * (driven - self.ic2));
@@ -918,7 +919,7 @@ impl Svf {
             FilterMode::HighPass => driven - k * v1 - v2,
             FilterMode::Off => driven,
         };
-        sanitise(value, 0.0)
+        finite_or(value, 0.0)
     }
 }
 
@@ -1017,7 +1018,7 @@ impl Voice {
 
     /// The pitch this voice is sounding right now, in MIDI semitones, glide included.
     fn pitch_semitones(&self) -> f32 {
-        self.note.key as f32 + sanitise(self.note.tuning, 0.0) + sanitise(self.glide, 0.0)
+        self.note.key as f32 + finite_or(self.note.tuning, 0.0) + finite_or(self.glide, 0.0)
     }
 
     fn reset_layer(&mut self, index: usize, sample: &Sample, params: &LayerParams, host_rate: f32) {
@@ -1127,7 +1128,7 @@ impl Voice {
             return Stereo::default();
         }
         self.advance_glide(params, sample_rate);
-        let velocity = sanitise(self.velocity, 1.0);
+        let velocity = finite_or(self.velocity, 1.0);
 
         // ---- Publication, in declared source order ----
         //
@@ -1163,7 +1164,7 @@ impl Voice {
                 self.graph.write(
                     routing::source::KEY,
                     standard::key(
-                        self.note.key as f32 + sanitise(self.glide, 0.0),
+                        self.note.key as f32 + finite_or(self.glide, 0.0),
                         routing::KEY_UNIT_SEMITONES,
                     ),
                 );
@@ -1175,19 +1176,19 @@ impl Voice {
             if routing.needs(routing::source::WHEEL) {
                 self.graph.write(
                     routing::source::WHEEL,
-                    standard::wheel(sanitise(performance.wheel[channel], 0.0)),
+                    standard::wheel(finite_or(performance.wheel[channel], 0.0)),
                 );
             }
             if routing.needs(routing::source::PRESSURE) {
                 self.graph.write(
                     routing::source::PRESSURE,
-                    standard::pressure(sanitise(self.pressure, 0.0)),
+                    standard::pressure(finite_or(self.pressure, 0.0)),
                 );
             }
             if routing.needs(routing::source::BEND) {
                 self.graph.write(
                     routing::source::BEND,
-                    standard::bend(sanitise(performance.bend[channel], 0.0)),
+                    standard::bend(finite_or(performance.bend[channel], 0.0)),
                 );
             }
             if routing.needs(routing::source::RANDOM) {
@@ -1292,9 +1293,9 @@ impl Voice {
         }
         let gain = envelope
             * velocity_gain
-            * sanitise(self.expression_gain, 1.0).clamp(0.0, 4.0)
+            * finite_or(self.expression_gain, 1.0).clamp(0.0, 4.0)
             * params.master.clamp(0.0, 2.0);
-        pan(filtered.gain(gain), sanitise(self.expression_pan, 0.0))
+        pan(filtered.gain(gain), finite_or(self.expression_pan, 0.0))
     }
 
     /// The base cutoff moved by the Shape envelope and by pressure, both in octaves.
@@ -1314,7 +1315,7 @@ impl Voice {
     /// `routing::FULL_SCALE`, which is §5's conservative form and why no stored value changed
     /// meaning. Pressure remains available at that reach but is absent from the owner-selected Init.
     fn effective_cutoff(&self, params: &Params, routing: &routing::Routing, routed: bool) -> f32 {
-        let base = sanitise(params.cutoff_hz, 18_000.0).clamp(20.0, 22_000.0);
+        let base = finite_or(params.cutoff_hz, 18_000.0).clamp(20.0, 22_000.0);
         let octaves = if routed {
             self.graph.sum(routing::target::CUTOFF, routing, 10.0)
         } else {
@@ -1329,7 +1330,7 @@ impl Voice {
         if self.glide == 0.0 {
             return;
         }
-        let seconds = sanitise(params.glide_s, 0.0).clamp(0.0, 5.0);
+        let seconds = finite_or(params.glide_s, 0.0).clamp(0.0, 5.0);
         if seconds <= 0.0 {
             self.glide = 0.0;
             return;
@@ -1361,9 +1362,9 @@ impl Voice {
 
     fn pitch_ratio(&self, params: &LayerParams) -> f32 {
         let semitones =
-            self.note.key as f32 + sanitise(self.note.tuning, 0.0) + sanitise(self.glide, 0.0)
-                - sanitise(params.root_note, 60.0)
-                + sanitise(params.tune_semitones, 0.0);
+            self.note.key as f32 + finite_or(self.note.tuning, 0.0) + finite_or(self.glide, 0.0)
+                - finite_or(params.root_note, 60.0)
+                + finite_or(params.tune_semitones, 0.0);
         2.0f32.powf((semitones / 12.0).clamp(-8.0, 8.0))
     }
 
@@ -1439,7 +1440,7 @@ impl Voice {
         let rate = sample.sample_rate() / host_rate;
         let pitch_ratio = self.pitch_ratio(params);
         let loop_mode = params.loop_mode;
-        let scan = sanitise(params.stretch_travel, 1.0).clamp(-2.0, 2.0);
+        let scan = finite_or(params.stretch_travel, 1.0).clamp(-2.0, 2.0);
         let search = (ALIGN_SEARCH_S * sample.sample_rate())
             .round()
             .clamp(0.0, region.len() * 0.5) as i32;
@@ -1879,12 +1880,12 @@ impl Voice {
             loop_end: region.end,
             ..region
         };
-        let density = sanitise(params.grain_density_hz, 14.0).clamp(0.5, MAX_GRAIN_DENSITY_HZ);
+        let density = finite_or(params.grain_density_hz, 14.0).clamp(0.5, MAX_GRAIN_DENSITY_HZ);
         // Travel is a continuous playhead that onsets sample, advanced per sample exactly as
         // Stretch advances it. Advancing it per spawn instead stalls the read position whenever the
         // pool is saturated and every spawn is dropped -- which is precisely the dense setting.
         let travel_step = sample.sample_rate() / host_rate
-            * sanitise(params.stretch_travel, 1.0).clamp(-2.0, 2.0)
+            * finite_or(params.stretch_travel, 1.0).clamp(-2.0, 2.0)
             * self.layers[index].direction;
         let scatter = Scatter::from_control(params.grain_onset_timing);
         let slot = host_rate / density;
@@ -1955,24 +1956,24 @@ impl Voice {
         // the same rate sum coherently however their onsets are placed — overlapping identical
         // copies at regular intervals is a comb filter, not a cloud — so this is the one control
         // that makes many grains sound like many sources.
-        let position = sanitise(params.grain_position_variation, 0.0).clamp(0.0, 1.0);
+        let position = finite_or(params.grain_position_variation, 0.0).clamp(0.0, 1.0);
         let position_jitter = self.random_bipolar() * position * region.len() * 0.35;
         // **Detune is Spread's, not Scatter's.** Welding them meant a cloud could not be thickened
         // into a section of players without also being thrown about in position, direction and
         // pan — and thickening is what a granular sampler is reached for. Spread is in semitones
         // because that is what a detune is heard as.
-        let spread = sanitise(params.grain_spread_semitones, 0.0).clamp(0.0, MAX_GRAIN_SPREAD_ST);
+        let spread = finite_or(params.grain_spread_semitones, 0.0).clamp(0.0, MAX_GRAIN_SPREAD_ST);
         let pitch_jitter = self.random_bipolar() * spread / 12.0;
         // **Width and reversal are their own controls**, because throwing a cloud across the field
         // and running grains backwards are two sounds you choose, not the toll for decorrelating
         // one. Reverse chance is a plain probability rather than a law that only opens past the
         // halfway point of a shared knob.
-        let width = sanitise(params.grain_stereo_width, 0.0).clamp(0.0, 1.0);
+        let width = finite_or(params.grain_stereo_width, 0.0).clamp(0.0, 1.0);
         let pan = self.random_bipolar() * width;
         let gains = pan_gains(pan);
         let reverse =
-            self.random_unit() < sanitise(params.grain_reverse_chance, 0.0).clamp(0.0, 1.0);
-        let duration = (sanitise(params.grain_size_s, 0.09).clamp(0.008, 1.0) * host_rate)
+            self.random_unit() < finite_or(params.grain_reverse_chance, 0.0).clamp(0.0, 1.0);
+        let duration = (finite_or(params.grain_size_s, 0.09).clamp(0.008, 1.0) * host_rate)
             .round()
             .max(8.0) as u32;
         let direction = if params.reverse ^ reverse { -1.0 } else { 1.0 };
@@ -2020,16 +2021,16 @@ struct Region {
 impl Region {
     fn new(len: usize, params: &LayerParams) -> Self {
         let last = len.saturating_sub(1) as f32;
-        let start_n = sanitise(params.start, 0.0).clamp(0.0, 1.0);
-        let end_n = sanitise(params.end, 1.0).clamp(0.0, 1.0);
+        let start_n = finite_or(params.start, 0.0).clamp(0.0, 1.0);
+        let end_n = finite_or(params.end, 1.0).clamp(0.0, 1.0);
         let mut start = start_n.min(end_n) * last;
         let mut end = start_n.max(end_n) * last;
         if end - start < MIN_REGION_FRAMES as f32 && last > 0.0 {
             end = (start + MIN_REGION_FRAMES as f32).min(last);
             start = (end - MIN_REGION_FRAMES as f32).max(0.0);
         }
-        let ls_n = sanitise(params.loop_start, start_n).clamp(0.0, 1.0);
-        let le_n = sanitise(params.loop_end, end_n).clamp(0.0, 1.0);
+        let ls_n = finite_or(params.loop_start, start_n).clamp(0.0, 1.0);
+        let le_n = finite_or(params.loop_end, end_n).clamp(0.0, 1.0);
         let loop_start = settle_on_frame(ls_n.min(le_n), last).clamp(start, end);
         // **Equal points are a one-frame loop.** The span is half-open, so a Loop end naming Loop
         // start's own frame loops that frame. When the span was the points' difference, equal points
@@ -2257,7 +2258,7 @@ impl Seam {
 
 /// The crossfade time a layer asks for, bounded here rather than trusted from the caller.
 fn crossfade_seconds(params: &LayerParams) -> f32 {
-    sanitise(params.loop_crossfade_s, 0.0).clamp(0.0, MAX_LOOP_CROSSFADE_S)
+    finite_or(params.loop_crossfade_s, 0.0).clamp(0.0, MAX_LOOP_CROSSFADE_S)
 }
 
 /// The crossfade's incoming gain at `ramp` through the fade: `sin²(ramp·π/2)`.
@@ -2268,7 +2269,7 @@ fn crossfade_seconds(params: &LayerParams) -> f32 {
 /// equal-power law would put +3 dB in the middle of every fade on an instrument with no limiter.
 #[inline]
 fn seam_rise(ramp: f32) -> f32 {
-    hann(sanitise(ramp, 0.0).clamp(0.0, 1.0) * 0.5)
+    hann(finite_or(ramp, 0.0).clamp(0.0, 1.0) * 0.5)
 }
 
 /// The recording at a fractional source position, clamped to the region, between the two frames
@@ -2801,11 +2802,11 @@ impl ResolvedCharacter {
         // it is the instrument's reason for existing, an emulation of what a Fairlight or an
         // Emulator II did to a sound on the way in. Those machines are remembered by numbers —
         // eight bits, twenty-odd kilohertz — and a knob reading 43% is not that number.
-        let rate = sanitise(character.rate, 0.0).clamp(0.0, 1.0);
-        let converter = sanitise(character.converter, 0.0).clamp(0.0, 1.0);
-        let reconstruction = sanitise(character.reconstruction, 0.0).clamp(0.0, 1.0);
-        let input = sanitise(character.input, 0.0).clamp(0.0, 1.0);
-        let jitter = sanitise(character.jitter, 0.0).clamp(0.0, 1.0);
+        let rate = finite_or(character.rate, 0.0).clamp(0.0, 1.0);
+        let converter = finite_or(character.converter, 0.0).clamp(0.0, 1.0);
+        let reconstruction = finite_or(character.reconstruction, 0.0).clamp(0.0, 1.0);
+        let input = finite_or(character.input, 0.0).clamp(0.0, 1.0);
+        let jitter = finite_or(character.jitter, 0.0).clamp(0.0, 1.0);
         let grid = character_rate_divisor(rate);
         let bits = character_bits(converter);
         Self {
@@ -2952,7 +2953,7 @@ fn sinc_read(
     bandlimit: f32,
 ) -> Stereo {
     let centre = position.floor() as i64;
-    let cutoff_now = sanitise(bandlimit, 1.0).clamp(0.02, 1.0);
+    let cutoff_now = finite_or(bandlimit, 1.0).clamp(0.02, 1.0);
     if cutoff_now >= 1.0 {
         // **The unity-rate path, which is most of them**, reading a kernel that was built and
         // normalised once instead of sixteen coefficients — each with its own division — on every
@@ -2995,7 +2996,7 @@ fn sinc_read(
     // Adjacent taps differ by constant angles. Walking those angles with a recurrence preserves
     // this sixteen-tap kernel while replacing three transcendentals per tap with two `sin_cos`
     // evaluations per complete read.
-    let cutoff = sanitise(bandlimit, 1.0).clamp(0.02, 1.0);
+    let cutoff = finite_or(bandlimit, 1.0).clamp(0.02, 1.0);
     let first_tap = -(SINC_TAPS / 2 - 1);
     let mut distance = position - (centre + i64::from(first_tap)) as f32;
     let (mut sinc_sin, mut sinc_cos) = (PI * cutoff * distance).sin_cos();
@@ -3082,8 +3083,8 @@ static HANN: std::sync::LazyLock<[f32; WINDOW_POINTS + 1]> = std::sync::LazyLock
 /// reproduced.
 #[must_use]
 pub fn grain_window(shape: f32, phase: f32) -> f32 {
-    let phase = sanitise(phase, 0.0).clamp(0.0, 1.0);
-    let shape = sanitise(shape, 1.0).clamp(0.0, 1.0);
+    let phase = finite_or(phase, 0.0).clamp(0.0, 1.0);
+    let shape = finite_or(shape, 1.0).clamp(0.0, 1.0);
     // **Smooth is the default and costs exactly what it always did.** At the top of the control the
     // crossfade lands entirely on `sin²(ramp·π/2)`, and that is this crate's own Hann read at half
     // the ramp — which by the window's symmetry is `hann(phase)`. Taking it directly is one table
@@ -3135,7 +3136,7 @@ static WINDOW_MOMENTS: std::sync::LazyLock<[(f32, f32); MOMENT_TABLE + 1]> =
 /// A tabled lookup — see [`WINDOW_MOMENTS`] for why it is not integrated on the spot.
 #[must_use]
 pub fn window_moments(shape: f32) -> (f32, f32) {
-    let scaled = sanitise(shape, 1.0).clamp(0.0, 1.0) * MOMENT_TABLE as f32;
+    let scaled = finite_or(shape, 1.0).clamp(0.0, 1.0) * MOMENT_TABLE as f32;
     let point = (scaled as usize).min(MOMENT_TABLE - 1);
     let blend = scaled - point as f32;
     let (low_mean, low_square) = WINDOW_MOMENTS[point];
@@ -3162,7 +3163,7 @@ fn integrate_moments(shape: f32) -> (f32, f32) {
 }
 
 fn hann(phase: f32) -> f32 {
-    let scaled = sanitise(phase, 0.0).clamp(0.0, 1.0) * WINDOW_POINTS as f32;
+    let scaled = finite_or(phase, 0.0).clamp(0.0, 1.0) * WINDOW_POINTS as f32;
     let point = (scaled as usize).min(WINDOW_POINTS - 1);
     let blend = scaled - point as f32;
     let low = HANN[point];
@@ -3237,7 +3238,7 @@ static UNITY_KERNEL: std::sync::LazyLock<[f32; (SINC_PHASES + 1) * SINC_TAPS_N]>
 /// 6 at 60%, 3 at 80%. Both ends are unchanged, so Clean is still exactly transparent.
 #[must_use]
 pub fn character_rate_divisor(rate: f32) -> f32 {
-    (5.0 * sanitise(rate, 0.0).clamp(0.0, 1.0)).exp2()
+    (5.0 * finite_or(rate, 0.0).clamp(0.0, 1.0)).exp2()
 }
 
 /// The converter's depth in bits, 16 down to 5.
@@ -3251,7 +3252,7 @@ pub fn character_rate_divisor(rate: f32) -> f32 {
 /// deliberate and unchanged: Clean has to be clean.
 #[must_use]
 pub fn character_bits(converter: f32) -> f32 {
-    (16.0 - sanitise(converter, 0.0).clamp(0.0, 1.0).sqrt() * 11.0)
+    (16.0 - finite_or(converter, 0.0).clamp(0.0, 1.0).sqrt() * 11.0)
         .round()
         .clamp(5.0, 16.0)
 }
@@ -3259,7 +3260,7 @@ pub fn character_bits(converter: f32) -> f32 {
 /// How hard the compander drives the converter, in decibels.
 #[must_use]
 pub fn character_drive_db(input: f32) -> f32 {
-    20.0 * (1.0 + sanitise(input, 0.0).clamp(0.0, 1.0) * 15.0).log10()
+    20.0 * (1.0 + finite_or(input, 0.0).clamp(0.0, 1.0) * 15.0).log10()
 }
 
 /// The lowest and highest pitch [`detect_root`] will look for, in hertz.
@@ -3351,7 +3352,7 @@ pub fn detect_root(sample: &Sample, from: f32) -> Option<f32> {
     let frames = sample.frames();
     let rate = sample.sample_rate();
     let last = frames.len().saturating_sub(1);
-    let begin = (sanitise(from, 0.0).clamp(0.0, 1.0) * last as f32) as usize;
+    let begin = (finite_or(from, 0.0).clamp(0.0, 1.0) * last as f32) as usize;
 
     let tau_max = (rate / PITCH_FLOOR_HZ).ceil() as usize;
     let tau_min = (rate / PITCH_CEILING_HZ).floor().max(2.0) as usize;
@@ -3558,8 +3559,8 @@ fn yin(
 /// The editor calls this rather than re-deriving it, so the readout and the gain law cannot
 /// disagree. It re-derived it once, without these clamps, and they did.
 pub fn overlap(params: &LayerParams, density_hz: f32) -> f32 {
-    let size = sanitise(params.grain_size_s, 0.09).clamp(0.008, 1.0);
-    let density = sanitise(density_hz, 14.0).clamp(0.5, MAX_GRAIN_DENSITY_HZ);
+    let size = finite_or(params.grain_size_s, 0.09).clamp(0.008, 1.0);
+    let density = finite_or(density_hz, 14.0).clamp(0.5, MAX_GRAIN_DENSITY_HZ);
     (size * density).clamp(1.0, MAX_OVERLAP)
 }
 
@@ -3598,7 +3599,7 @@ fn normalisation(params: &LayerParams, density_hz: f32) -> f32 {
     // coherently however they are placed. This crate could not say that until the position draw and
     // the onset schedule became separate controls — one knob drove both, so the law had to gate on
     // the pair and compromised in both directions.
-    let decorrelated = sanitise(params.grain_position_variation, 0.0).clamp(0.0, 1.0);
+    let decorrelated = finite_or(params.grain_position_variation, 0.0).clamp(0.0, 1.0);
     coherent + decorrelated * (incoherent - coherent)
 }
 
@@ -4254,7 +4255,7 @@ fn pan(value: Stereo, pan: f32) -> Stereo {
 /// Split out so a grain can latch it at spawn: a grain's pan does not change while it lives, and
 /// paying two transcendentals per sample to recompute a constant was measurable.
 fn pan_gains(pan: f32) -> (f32, f32) {
-    let angle = (sanitise(pan, 0.0).clamp(-1.0, 1.0) + 1.0) * PI * 0.25;
+    let angle = (finite_or(pan, 0.0).clamp(-1.0, 1.0) + 1.0) * PI * 0.25;
     (
         angle.cos() * std::f32::consts::SQRT_2,
         angle.sin() * std::f32::consts::SQRT_2,
@@ -4271,10 +4272,6 @@ fn quantizer_levels(bits: f32) -> f32 {
 
 fn soft_clip(value: f32) -> f32 {
     value / (1.0 + value.abs())
-}
-
-fn sanitise(value: f32, fallback: f32) -> f32 {
-    if value.is_finite() { value } else { fallback }
 }
 
 fn flush(value: f32) -> f32 {
@@ -4385,7 +4382,7 @@ impl Lfo {
             }
             LfoShape::SampleHold => self.held,
         };
-        let rate = sanitise(rate_hz, 0.25).clamp(0.01, 40.0);
+        let rate = finite_or(rate_hz, 0.25).clamp(0.01, 40.0);
         let advanced = self.phase + rate / sample_rate.max(1.0);
         if advanced >= 1.0 {
             // One draw per cycle, taken on the wrap, so the held value changes at the rate the
@@ -4737,8 +4734,8 @@ impl Engine {
                 ^ 0xa5a5_5a5a_c3c3_3c3c;
             standard::random(SplitMix64::new(seed).unit_f32())
         };
-        voice.glide = if sanitise(params.glide_s, 0.0) > 0.0 {
-            (previous - note.key as f32 - sanitise(note.tuning, 0.0)).clamp(-128.0, 128.0)
+        voice.glide = if finite_or(params.glide_s, 0.0) > 0.0 {
+            (previous - note.key as f32 - finite_or(note.tuning, 0.0)).clamp(-128.0, 128.0)
         } else {
             0.0
         };
@@ -4849,14 +4846,14 @@ impl Engine {
         // carrying it has been released, and the note underneath has expression of its own.
         voice.expression_gain = previous.expression_gain;
         voice.expression_pan = previous.expression_pan;
-        voice.glide = (sounding - previous.note.key as f32 - sanitise(previous.note.tuning, 0.0))
+        voice.glide = (sounding - previous.note.key as f32 - finite_or(previous.note.tuning, 0.0))
             .clamp(-128.0, 128.0);
     }
 
     /// Note pressure for one press: an id wins, and an id-less event addresses the newest matching
     /// press. Retained through release so a tail keeps the expression it was played with.
     pub fn set_pressure(&mut self, id: Option<u32>, channel: u8, key: u8, pressure: f32) -> bool {
-        let value = sanitise(pressure, 0.0).clamp(0.0, 1.0);
+        let value = finite_or(pressure, 0.0).clamp(0.0, 1.0);
         self.record_expression(id, channel, key, |press| press.pressure = value);
         self.with_expression_target(id, channel, key, |voice| voice.pressure = value)
     }
@@ -4894,14 +4891,14 @@ impl Engine {
         key: u8,
         gain: f32,
     ) -> bool {
-        let value = sanitise(gain, 1.0).clamp(0.0, 4.0);
+        let value = finite_or(gain, 1.0).clamp(0.0, 4.0);
         self.record_expression(id, channel, key, |press| press.expression_gain = value);
         self.with_expression_target(id, channel, key, |voice| voice.expression_gain = value)
     }
 
     /// Pan expression, `-1..=1`, applied after layer pans and Blend.
     pub fn set_expression_pan(&mut self, id: Option<u32>, channel: u8, key: u8, pan: f32) -> bool {
-        let value = sanitise(pan, 0.0).clamp(-1.0, 1.0);
+        let value = finite_or(pan, 0.0).clamp(-1.0, 1.0);
         self.record_expression(id, channel, key, |press| press.expression_pan = value);
         self.with_expression_target(id, channel, key, |voice| voice.expression_pan = value)
     }
@@ -4942,7 +4939,7 @@ impl Engine {
     /// Add a channel pitch-bend delta to every sounding or releasing voice on that channel.
     /// Deltas keep per-note tuning intact when the bend wheel moves after note-on.
     pub fn add_channel_tuning(&mut self, channel: u8, delta_semitones: f32) {
-        let delta = sanitise(delta_semitones, 0.0).clamp(-128.0, 128.0);
+        let delta = finite_or(delta_semitones, 0.0).clamp(-128.0, 128.0);
         for voice in &mut self.voices {
             if voice.active && voice.note.channel == channel {
                 voice.note.tuning = (voice.note.tuning + delta).clamp(-128.0, 128.0);
@@ -4980,7 +4977,7 @@ impl Engine {
         let Some(index) = index else {
             return false;
         };
-        self.voices[index].note.tuning = sanitise(semitones, 0.0).clamp(-128.0, 128.0);
+        self.voices[index].note.tuning = finite_or(semitones, 0.0).clamp(-128.0, 128.0);
         true
     }
 
@@ -5302,11 +5299,7 @@ impl Engine {
 }
 
 fn valid_sample_rate(sample_rate: f32) -> f32 {
-    if sample_rate.is_finite() {
-        sample_rate.clamp(8_000.0, 384_000.0)
-    } else {
-        48_000.0
-    }
+    finite_or(sample_rate, 48_000.0).clamp(8_000.0, 384_000.0)
 }
 
 #[cfg(test)]

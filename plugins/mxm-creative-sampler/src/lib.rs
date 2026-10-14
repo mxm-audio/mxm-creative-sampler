@@ -567,11 +567,8 @@ impl Plugin for MxmCreativeSampler {
         // divisions (`plans/plan-tempo-sync-controls.md`).
         self.telemetry.tempo.publish(None);
         self.synced = [None; 4];
-        self.sample_rate = if config.sample_rate.is_finite() {
-            config.sample_rate.clamp(8_000.0, 384_000.0)
-        } else {
-            48_000.0
-        };
+        self.sample_rate =
+            mxm_dsp::guard::finite_or(config.sample_rate, 48_000.0).clamp(8_000.0, 384_000.0);
         self.engine.set_sample_rate(self.sample_rate);
         self.engine.panic();
         self.bends = [0.0; NUM_CHANNELS];
