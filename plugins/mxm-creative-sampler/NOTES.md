@@ -110,7 +110,7 @@ Who commits, and after what:
 | Path | Staged by | Committed after |
 |---|---|---|
 | Preset or bank load | `Instrument::apply_preset_state` | `Instrument::commit_preset_state`, called by the shared seam once the parameter gestures are written |
-| Editor import (drop or Browse) | `AssetField::import_wav`, on the task thread | the editor's root/region/loop reset gestures, in the frame that sees the new revision; `editor_closed` is the backstop |
+| Editor import (drop or Browse) | `AssetField::import_wav`, on the task thread | the editor's root/region/loop reset gestures, in the frame that sees the new revision; the panel's close hook (`closed`) is the backstop |
 | Host state restore | `PersistentField::set` | nothing — nice-plug writes every parameter before `deserialize_fields`, so a restore already arrives in the barrier's order and publishes in one step |
 
 Native drag-and-drop onto the Source canvas or directly onto A/B is primary; Browse is secondary.

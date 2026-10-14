@@ -10,7 +10,6 @@ use mxm_ui::space::SPACE_5;
 use mxm_ui::theme::Tokens;
 use nice_plug::context::gui::GuiContext;
 use nice_plug::prelude::*;
-use nice_plug_egui::{EguiEditorState, NiceEguiApp, create_egui_editor};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -21,30 +20,17 @@ const REFERENCE: (u32, u32) = (1780, 1077);
 pub(crate) const MINIMUM: (u32, u32) = (520, 420);
 const WAVEFORM_POINTS: usize = 640;
 
-pub type MxmCreativeSamplerEditor = nice_plug_egui::EguiEditor<MxmCreativeSamplerApp>;
+pub type MxmCreativeSamplerEditor = mxm_editor::Editor<MxmCreativeSamplerApp>;
 
 pub fn create(
     params: Arc<MxmCreativeSamplerParams>,
     telemetry: Arc<Telemetry>,
     executor: AsyncExecutor<MxmCreativeSampler>,
 ) -> Option<MxmCreativeSamplerEditor> {
-    let state = EguiEditorState::from_size(
-        nice_plug::editor::dpi::LogicalSize::new(REFERENCE.0, REFERENCE.1),
-        1.0,
-    );
-    create_egui_editor(
-        state,
-        nice_plug_egui::RepaintNotifier::new(),
-        nice_plug_egui::EguiNiceSettings {
-            title: crate::NAME.to_owned(),
-            resize_hint: ResizeHint {
-                size_constraints: nice_plug::editor::SizeConstraints::min_logical_size(
-                    nice_plug::editor::dpi::LogicalSize::new(MINIMUM.0 as f32, MINIMUM.1 as f32),
-                ),
-                ..ResizeHint::RESIZABLE
-            },
-            ..Default::default()
-        },
+    mxm_editor::create(
+        crate::NAME,
+        REFERENCE,
+        MINIMUM,
         MxmCreativeSamplerApp::new(params, telemetry, executor),
     )
 }
@@ -53,7 +39,6 @@ pub struct MxmCreativeSamplerApp {
     params: Arc<MxmCreativeSamplerParams>,
     telemetry: Arc<Telemetry>,
     executor: AsyncExecutor<MxmCreativeSampler>,
-    gui_context: Option<GuiContext>,
     selected_layer: usize,
     waveform: Vec<[f32; 2]>,
     waveform_revision: u64,
@@ -79,7 +64,6 @@ impl MxmCreativeSamplerApp {
             params,
             telemetry,
             executor,
-            gui_context: None,
             selected_layer: 0,
             waveform: Vec::with_capacity(WAVEFORM_POINTS),
             waveform_revision: u64::MAX,
@@ -133,24 +117,13 @@ impl MxmCreativeSamplerApp {
     }
 }
 
-impl NiceEguiApp for MxmCreativeSamplerApp {
-    fn build(
-        &mut self,
-        context: egui::Context,
-        gui_context: GuiContext,
-        _frame: &mut nice_plug_egui::Frame,
-    ) -> Result<(), nice_plug_egui::baseview::HandlerError> {
-        mxm_ui::shell::install(&context);
-        self.gui_context = Some(gui_context);
+impl mxm_editor::Panel for MxmCreativeSamplerApp {
+    fn opened(&mut self, context: &egui::Context, _gui_context: &GuiContext) {
         // The default task is loading, even though category order still begins at Performance.
-        mxm_ui::paging::editor::request_card(&context, mxm_ui::paging::Key(3));
-        Ok(())
+        mxm_ui::paging::editor::request_card(context, mxm_ui::paging::Key(3));
     }
 
-    fn ui(&mut self, ui: &mut Ui, _frame: &mut nice_plug_egui::Frame) {
-        let Some(context) = self.gui_context.clone() else {
-            return;
-        };
+    fn ui(&mut self, ui: &mut Ui, context: &GuiContext) {
         ui.ctx()
             .request_repaint_after(std::time::Duration::from_millis(40));
         let revision = self.params.assets.revision();
@@ -246,7 +219,7 @@ impl NiceEguiApp for MxmCreativeSamplerApp {
         );
     }
 
-    fn editor_closed(&mut self) {
+    fn closed(&mut self, host: &GuiContext) {
         // **The same decision as a frame, with one thing taken away: there is no next frame.**
         // A `Wait` here would leave the revision staged for whenever an editor is opened again,
         // which is correct — the `handled` watermark is what makes a later editor finish the job —
@@ -254,16 +227,13 @@ impl NiceEguiApp for MxmCreativeSamplerApp {
         let revision = self.params.assets.revision();
         let status = self.params.assets.status();
         let action = settle_action(revision, self.params.assets.handled(), &status);
-        if let Some(context) = self.gui_context.clone() {
-            settle(
-                self.params.as_ref(),
-                &context.param_setter(),
-                revision,
-                &status,
-                action,
-            );
-        }
-        self.gui_context = None;
+        settle(
+            self.params.as_ref(),
+            &host.param_setter(),
+            revision,
+            &status,
+            action,
+        );
     }
 }
 

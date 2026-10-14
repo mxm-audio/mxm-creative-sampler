@@ -30,6 +30,7 @@ mxm-audio-file = { git = "https://github.com/mxm-audio/mxm-kit", branch = "main"
 mxm-audio-file-decode = { git = "https://github.com/mxm-audio/mxm-kit", branch = "main" }
 mxm-creative-sampler-dsp = { path = "crates/mxm-creative-sampler-dsp" }
 mxm-dsp = { git = "https://github.com/mxm-audio/mxm-kit", branch = "main" }
+mxm-editor = { git = "https://github.com/mxm-audio/mxm-kit", branch = "main" }
 mxm-measure = { git = "https://github.com/mxm-audio/mxm-kit", branch = "main" }
 mxm-modulation = { git = "https://github.com/mxm-audio/mxm-kit", branch = "main" }
 mxm-modulation-params = { git = "https://github.com/mxm-audio/mxm-kit", branch = "main" }
