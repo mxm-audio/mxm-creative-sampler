@@ -140,10 +140,7 @@ impl NiceEguiApp for MxmCreativeSamplerApp {
         gui_context: GuiContext,
         _frame: &mut nice_plug_egui::Frame,
     ) -> Result<(), nice_plug_egui::baseview::HandlerError> {
-        mxm_ui::theme::apply(&context);
-        mxm_ui::typography::apply(&context);
-        context.set_theme(mxm_ui::theme::preference());
-        mxm_ui::navigation::use_shared_keymap(&context);
+        mxm_ui::shell::install(&context);
         self.gui_context = Some(gui_context);
         // The default task is loading, even though category order still begins at Performance.
         mxm_ui::paging::editor::request_card(&context, mxm_ui::paging::Key(3));
@@ -313,16 +310,8 @@ pub fn panel(
         presets.set_browser_open(open);
     }
     // Applied and never stored: a capture run must not rewrite the choice made in the app bar.
-    if let Some(preference) = telemetry
-        .dev
-        .take_theme()
-        .and_then(mxm_ui::theme::from_index)
-    {
-        ui.ctx().set_theme(preference);
-    }
+    mxm_ui::shell::developer_theme(ui.ctx(), &telemetry.dev);
     let tokens = tokens_for(ui);
-    let peak = telemetry.meter.take();
-    let clipped = telemetry.meter.clipped();
     mxm_ui::AppBar::new(crate::NAME).show_with(
         ui,
         &tokens,
@@ -346,9 +335,7 @@ pub fn panel(
             );
         },
         |ui| {
-            if mxm_ui::shell::level_meter(ui, &tokens, peak, clipped) {
-                telemetry.meter.clear_clip();
-            }
+            mxm_ui::shell::peak_meter(ui, &tokens, &telemetry.meter);
             // **Design system §3.1 slot 6**: the master output control belongs beside the level and
             // clip indicator, not filed with voice allocation. It stays an ordinary host parameter
             // — automatable, and reachable by the keyboard cursor through `navigation::at` — so
