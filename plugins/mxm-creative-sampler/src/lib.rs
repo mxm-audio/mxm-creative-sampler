@@ -746,7 +746,39 @@ impl ClapPlugin for MxmCreativeSampler {
     ];
 }
 
+impl Vst3Plugin for MxmCreativeSampler {
+    /// Permanent, as `CLAP_ID` is: the CLAP id's hash written out, held to it by
+    /// `identity::the_vst3_class_id_is_the_clap_ids_hash`.
+    const VST3_CLASS_ID: [u8; 16] = [
+        0x33, 0x7f, 0x03, 0xb9, 0xa9, 0xa1, 0xf6, 0xcd, 0xee, 0x9d, 0xcd, 0xc4, 0xe2, 0xac, 0x0a,
+        0xa3,
+    ];
+    const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] = &[
+        Vst3SubCategory::Instrument,
+        Vst3SubCategory::Sampler,
+        Vst3SubCategory::Stereo,
+    ];
+}
+
 nice_export_clap!(MxmCreativeSampler);
+nice_export_vst3!(MxmCreativeSampler);
+
+/// The plugin's identity in each format.
+#[cfg(test)]
+mod identity {
+    use super::MxmCreativeSampler;
+    use mxm_plugin_test::formats;
+
+    #[test]
+    fn the_vst3_class_id_is_the_clap_ids_hash() {
+        formats::the_vst3_class_id_is_the_clap_ids_hash::<MxmCreativeSampler>();
+    }
+
+    #[test]
+    fn the_vst3_categories_follow_the_clap_features() {
+        formats::the_vst3_categories_follow_the_clap_features::<MxmCreativeSampler>();
+    }
+}
 
 #[cfg(test)]
 mod routing_timing_tests {
