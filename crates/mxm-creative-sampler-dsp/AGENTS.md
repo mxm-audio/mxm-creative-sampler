@@ -77,7 +77,9 @@ here. The plugin prepares decoded files and owns publication/reclamation.
   Reads use the layer's own `LoopMode`; head positions wrap in the reader's float domain.
 - **The period track narrows the search only**: not the window length, and not within one window
   of an onset ([§ period](NOTES.md#the-period-narrows-the-search-and-the-window-stayed-fixed)).
-- **Grain** draws on the shared `GRAIN_BUDGET`; its five variation controls stay independent
+- **Grain** draws on the shared `GRAIN_BUDGET`, or the smaller budget a host running several
+  engines gives each (`Engine::set_grain_budget`; the web tracker holds a song to W0's cap,
+  `a_grain_budget_set_lower_is_never_exceeded`); its five variation controls stay independent
   (`spread_and_scatter_are_independent`, `scatter_decorrelates_without_panning_or_reversing`).
   Travel advances per sample on Stretch's law
   (`grain_travel_traverses_the_region_and_does_not_stall_on_a_saturated_pool`).

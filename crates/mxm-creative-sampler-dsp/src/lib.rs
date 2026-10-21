@@ -4578,6 +4578,9 @@ pub struct Engine {
     /// `note_off` has no parameters of its own and a release must not consult a different mode
     /// from the press it answers, so the engine remembers the one it was last told.
     mode: VoiceMode,
+    /// The grains this engine shares among its sounding layers: [`GRAIN_BUDGET`] unless a host
+    /// running several engines caps them together ([`Engine::set_grain_budget`]).
+    grain_budget: usize,
 }
 
 impl Default for Engine {
@@ -4610,7 +4613,16 @@ impl Engine {
             performance: Performance::default(),
             ledger: Ledger::default(),
             mode: VoiceMode::Poly,
+            grain_budget: GRAIN_BUDGET,
         }
+    }
+
+    /// The grains this engine shares among its sounding layers, from one up to [`GRAIN_BUDGET`]: a
+    /// host running several engines on a phone holds them to a total of its own (the web
+    /// tracker's), each engine taking its part. A grain past a share already playing ends as
+    /// every grain does; none is cut.
+    pub fn set_grain_budget(&mut self, budget: usize) {
+        self.grain_budget = budget.clamp(1, GRAIN_BUDGET);
     }
 
     /// Fills `out` with every grain sounding on `layer`, and returns how many were written.
@@ -5174,7 +5186,7 @@ impl Engine {
         // to get unconditionally. A voice that is releasing still owns its grains, so it still
         // counts — `active_voices` includes tailing voices, which is what this needs.
         let layers_loaded = samples.iter().filter(|s| s.is_some()).count().max(1);
-        let share = GRAIN_BUDGET / (self.active_voices() * layers_loaded).max(1);
+        let share = self.grain_budget / (self.active_voices() * layers_loaded).max(1);
         let share = share.min(MAX_GRAINS_PER_LAYER);
         let mut output = Stereo::default();
         for voice in &mut self.voices {
@@ -7484,6 +7496,38 @@ mod tests {
             eight / 8 < one,
             "sharing did not favour the sparser texture: {one} on one note, {eight} across eight"
         );
+    }
+
+    /// A host holding several engines to a total of its own gives each its part
+    /// (`Engine::set_grain_budget`): never more grains than that, a dense note still sounding.
+    #[test]
+    fn a_grain_budget_set_lower_is_never_exceeded() {
+        let sample = tone(48_000);
+        let mut params = Params {
+            attack_s: 0.001,
+            sustain: 1.0,
+            ..Params::default()
+        };
+        params.layers[0] = LayerParams {
+            reader: Reader::Grain,
+            loop_mode: LoopMode::Forward,
+            grain_size_s: 1.0,
+            grain_density_hz: 200.0,
+            grain_position_variation: 0.5,
+            grain_onset_timing: 0.5,
+            ..LayerParams::default()
+        };
+        let mut engine = Engine::default();
+        engine.set_grain_budget(24);
+        engine.note_on(Note::midi(60, 1.0), [Some(&sample), None], &params);
+        let (mut peak, mut loudest) = (0usize, 0.0f32);
+        for _ in 0..48_000 {
+            let out = engine.render([Some(&sample), None], &params);
+            peak = peak.max(engine.active_grains());
+            loudest = loudest.max(out.left.abs());
+        }
+        assert!(peak > 0 && peak <= 24, "{peak} grains under a budget of 24");
+        assert!(loudest > 0.01, "the note sounds: {loudest}");
     }
 
     #[test]
