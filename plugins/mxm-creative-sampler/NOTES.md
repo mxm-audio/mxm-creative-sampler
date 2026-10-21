@@ -58,29 +58,31 @@ examples. AGENTS.md is the contract; this file is the reference it links to.
 
 ## File map
 
-- `src/lib.rs` — CLAP identity/export, event timing, parameter-to-DSP translation, the bend-range
-  resync, note expression, activity, malformed-state preflight and the developer channel's gate.
-- `src/init.rs` — the one declarative, compiled-in Init patch: generated sources, all parameter
-  defaults and route state. It is read-only because no preset file exists to overwrite.
-- `src/params.rs` — provisional host parameter ids, ranges and display laws, source/processing
-  classification and persisted preset identity; defaults are read from `src/init.rs`.
-- `src/naming.rs` — what a file name says about its pitch, and the survey of a real library behind
-  both the parser and the decision not to take Root from the `smpl` chunk's unity note.
-- `src/wav_loop.rs` — the loop a WAV's `smpl` chunk carries, read beside the decoder, and the pitch that
-  loop plays at.
+- `src/lib.rs` — CLAP export, event timing, the per-sample read of the parameters into the state
+  crate's `Sound`, the bend-range resync, note expression, activity, malformed-state preflight and
+  the developer channel's gate. Identity is the state crate's (`NAME`, `CLAP_ID`).
+- `src/params.rs` — the host parameters, **built from the state crate's table**: the `#[id]`
+  attributes and choice enums nice-plug needs written out, the per-sample reads, the tempo syncs'
+  resolution and the persisted preset identity.
+- `src/routes.rs` — the routing pairs as nice-plug parameters, their ids, names, Init and reach from
+  the state crate, each amount built by mxm-kit's `amount_param_at`.
+- **The state crate** (`crates/mxm-creative-sampler-state`) holds what moved out, re-exported at
+  the old paths where code reached them (`crate::generate`, `naming`, `wav_loop`): the Init patch,
+  the parameter table, the payload and its checks, the import and its arrival, what a file name
+  says about its pitch (`naming.rs`, with the survey behind it), the loop a WAV's `smpl` chunk
+  carries (`wav_loop.rs`) and the seventeen generated sources (`generate.rs`).
 - `src/preset.rs` — `mxm-preset::Instrument`: user asset capture, recipe preservation, the
   source-owned id set Init and recipes both consult, and the four pre-listening recipes with the
   designs they are generated from.
 - `presets/` — those four recipe files. Generated, never hand-edited: change the design in
   `src/preset.rs` and rerun the ignored `rewrite_factory_files`.
-- `src/asset.rs` — import through `mxm-audio-file-decode`, canonical embedded stereo i16 payload, three-slot publication,
-  reader lifetime and off-audio retirement/reclamation, the fallible reservation of every buffer a
-  payload, preset or import sizes, and the **generated starting source** a fresh instance loads on A.
+- `src/asset.rs` — three-slot publication, reader lifetime and off-audio retirement/reclamation,
+  staging an import, a generated source or a preset with the arrival record beside its revision,
+  and the **generated starting source** a fresh instance publishes on A. The payload, its fallible
+  reservations and the import are the state crate's `payload` and `import`.
 - `src/editor.rs`, `src/sections.rs`, `src/binding.rs` — native drop/Browse acquisition, waveform
   and the brief-owned cards. `editor::panel` is the whole surface with its host and asset
   dependencies passed in, so the keyboard-cursor check can paint it headlessly.
-- `src/generate.rs` — the seventeen generated sources: one additive engine, seventeen spectral recipes,
-  and the two rules (whole cycles, an out-and-back sweep) that make every one of them loop.
 - `src/visuals.rs` — the grains, drawn over the Sample card's waveform from live voice state.
 - `src/telemetry.rs` — lock-free peak, clip, voice-count and playhead telemetry, plus the sounding
   grains the waveform overlay is drawn from, the layer handshake that selects them, and the
@@ -274,18 +276,18 @@ them to something tidier — `the_generated_source_loops_seamlessly_and_is_in_tu
 - **Whole cycles**, because the init patch loops it, and a loop that closes part way up a ramp
   clicks once a second.
 - **A whole MIDI note**, because a generated source is tuned by its name, and a name says a note:
-  Root has held cents since D6, but `root_in_name` and Auto both answer whole notes. 142 cycles in
-  52 105 frames is 130.81278 Hz — C3 to 0.0000 cents.
+  Root has held cents since D6, but `import::root_in_name` and Auto both answer whole notes. 142
+  cycles in 52 105 frames is 130.81278 Hz — C3 to 0.0000 cents.
 - **Band-limited to 12 kHz**, not to Nyquist, because the init saw gets played up the keyboard and a
   saw built out to 24 kHz folds as soon as it leaves its root. Measured by DFT on the bin the partial
   lands in, not inferred from the waveform's slope.
 
 ### The generated bank, and the two rules that make it loop
 
-**The instrument makes seventeen sources** in `src/generate.rs`: a pulse sweeping its width 50% →
-1%, a saw sweeping the same way, a triangle arriving at a sine from an overtone-rich start, and
-thirteen more. Generated, not loaded, so they
-stay lightweight and nothing enters the repository.
+**The instrument makes seventeen sources** in the state crate's `generate.rs`: a pulse sweeping its
+width 50% → 1%, a saw sweeping the same way, a triangle arriving at a sine from an overtone-rich
+start, and thirteen more. Generated, not loaded, so they stay lightweight and nothing enters the
+repository.
 
 **The point is the readers.** Each one sweeps its *spectrum* across its length, so the scan position
 becomes a timbre control — which is what Repitch, Stretch and Grain are for. A static waveform gives
@@ -320,10 +322,10 @@ similar"*. Moving the partials' own amplitudes has no null and needs no phase-lo
   0.273 at the wrap against 0.206 anywhere inside itself.
 
 **A generated source knows its own root, and says so in its name.** Every recipe is C3 by
-construction, but an arrival that knows nothing better lands Root on `NEUTRAL_ROOT`, because a
-*dropped file's* pitch is unknown — which would leave the whole bank an octave out, the very
-complaint that produced `Oct ±`. The names end in `C3`, so `root_in_name` tunes them through the path
-a dropped file's name already takes, rather than a second mechanism deciding Root.
+construction, but an arrival that knows nothing better lands Root on `import::NEUTRAL_ROOT`, because
+a *dropped file's* pitch is unknown — which would leave the whole bank an octave out, the very
+complaint that produced `Oct ±`. The names end in `C3`, so `import::root_in_name` tunes them through
+the path a dropped file's name already takes, rather than a second mechanism deciding Root.
 
 **The picker is one click and keeps no state.** Design system §7.4's shared caret `selector` — *"an
 editor does not substitute a local dropdown"* — with the displayed entry **derived from the loaded
@@ -385,13 +387,14 @@ LFO 1 and LFO 2 → A Scan speed pairs retain their parked 76.53061% and 17.8571
 and the absent Pressure → Cutoff pair retains its parked 100%; adding one restores its selected
 depth.
 
-`src/init.rs::PATCH` is the single editable declaration of this sound. Parameter constructors read
-its plain values, `AssetField` reads its generated-source choices and routing parameters read its
-presence/amount pairs. The shared preset system still derives Init from the resulting CLAP parameter
-defaults and gives it no file, so Init cannot be overwritten, renamed or deleted and host Reset
-cannot disagree with it. `init_uses_the_current_live_sound_declared_in_one_patch` pins the distinctive
-values; `a_fresh_instance_plays_the_init_patch_without_a_drop` proves it sounds through the real
-bundle with no parameter touched and no state loaded.
+The state crate's `init::PATCH` is the single editable declaration of this sound. Its parameter
+table reads its plain values, and the parameter constructors read that table, `AssetField` reads its
+generated-source choices and routing parameters read its presence/amount pairs. The shared preset
+system still derives Init from the resulting CLAP parameter defaults and gives it no file, so Init
+cannot be overwritten, renamed or deleted and host Reset cannot disagree with it.
+`init_uses_the_current_live_sound_declared_in_one_patch` pins the distinctive values;
+`a_fresh_instance_plays_the_init_patch_without_a_drop` proves it sounds through the real bundle with
+no parameter touched and no state loaded.
 
 **Closed:** the two `mxm-player` state-restore tests that this change broke now pass. The note was
 never late — it was slept, mid-attack, and a suspended plugin is never called again. See *A held
@@ -619,10 +622,10 @@ player never made — but only if it is visible, so the outcome is written besid
 instance is in tune with the generated saw and `b_root` at C4 because layer B has no saw to be in
 tune with — right until a file is dropped, at which point the saw is gone, C3 means nothing to the
 new audio, and the same file dropped on A and on B came out an octave apart. Both land on
-`NEUTRAL_ROOT`, C4, **when nothing better is known** — a loop's own pitch, then a key in the name,
-comes first — and Auto is there for the sample that knows better. Start and End still reset to their
-own defaults, because theirs mean the same thing whatever is loaded, and so do the loop points unless
-the file carries its own loop.
+`import::NEUTRAL_ROOT`, C4, **when nothing better is known** — a loop's own pitch, then a key in the
+name, comes first — and Auto is there for the sample that knows better. Start and End still reset to
+their own defaults, because theirs mean the same thing whatever is loaded, and so do the loop points
+unless the file carries its own loop.
 
 **Auto’s result is keyed by layer revision, not layer alone.** Drop, Browse, preset load and host
 state restore all retire a result produced for replaced audio.
@@ -700,8 +703,9 @@ attack too. `dwFraction` is ignored, and a finite play count loops for as long a
 stages a looped file, then a plain one, before any settle: the stale settle writes nothing, and the
 current one writes no loop mode, crossfade or loop pitch.
 
-**Resolved once, then written once.** `editor::resolve_arrival` decides every value from the staged
-sample, and `write_arrival` writes each as one complete gesture before the commit:
+**Resolved once, then written once.** The state crate's `import::resolve` decides every value from
+the staged sample, and `editor::write_arrival` writes each of its `Arrived::writes` as one complete
+gesture before the commit:
 
 | Arrival | Start, End | Loop points | Loop mode | Crossfade | Root |
 |---|---|---|---|---|---|

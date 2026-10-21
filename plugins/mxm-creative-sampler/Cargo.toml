@@ -25,17 +25,22 @@ mxm-telemetry.workspace = true
 mxm-tempo.workspace = true
 egui.workspace = true
 mxm-creative-sampler-dsp.workspace = true
-base64 = "=0.22.1"
-# Imports every format the collection reads: WAV, AIFF, FLAC, ALAC, MP3, AAC in M4A, Ogg Vorbis.
-# Carries MPL-2.0 symphonia, accepted by the owner (2026-09-15); its notice is compiled in.
-mxm-audio-file-decode.workspace = true
+# What a state means: the parameter table, Init, the payload, the import and its arrival, and the
+# mapping onto the DSP's parameters, shared with the web tracker. Its import carries MPL-2.0
+# symphonia through `mxm-audio-file-decode`, accepted by the owner (2026-09-15); its notice is
+# compiled in.
+mxm-creative-sampler-state.workspace = true
 rfd = "=0.15.4"
-serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.145"
 
 [dev-dependencies]
-# The loop-chunk tests' seeded streams.
-mxm-rng.workspace = true
+# The refusal tests refuse the state crate's reservations one by one. A test-only feature, so the
+# bundle carries none of it.
+mxm-creative-sampler-state = { workspace = true, features = ["refusal"] }
+# The asset tests build payloads by hand.
+base64 = "=0.22.1"
+# The measurement examples decode files the way an import does.
+mxm-audio-file-decode.workspace = true
 # The collection's shared headless checks (`crates/mxm-plugin-test`).
 mxm-plugin-test.workspace = true
 # The tests write the WAVs they import through the collection's encoder. Test-only.

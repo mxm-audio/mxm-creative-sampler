@@ -694,12 +694,12 @@ rather than growing.
 ## Routing and expression ownership
 
 This framework-free crate declares the available routing grid and each pair's reach in `FULL_SCALE`;
-it does not own a product patch. `Engine::new` therefore starts with `Routing::new()`, and the plugin
-supplies its compiled Init topology before rendering exactly as it supplies every later parameter
-edit. The one declarative Init lives in `plugins/mxm-creative-sampler/src/init.rs`, beside the host
-parameters and generated-source policy that also read it. Cutoff routes sum in octaves and clamp
-once, which keeps a closed filter from being pushed below audibility by one route and dragged back
-by another.
+it does not own a product patch. `Engine::new` therefore starts with `Routing::new()`, and the
+plugin supplies its compiled Init topology before rendering exactly as it supplies every later
+parameter edit. The one declarative Init lives in `crates/mxm-creative-sampler-state/src/init.rs`,
+beside the parameter table and generated-source policy that also read it. Cutoff routes sum in
+octaves and clamp once, which keeps a closed filter from being pushed below audibility by one route
+and dragged back by another.
 
 Reader, filter and normalization tests construct the routes their oracle needs rather than inheriting
 product policy. The plugin's default-parameter and fresh-instance integration tests cover Init.

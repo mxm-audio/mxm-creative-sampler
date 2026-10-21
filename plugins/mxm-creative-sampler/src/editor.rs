@@ -1,11 +1,12 @@
 //! Rough but production-architecture MXM editor for the playable sampler slice.
 
-use crate::asset::{Arrival, LoadState};
+use crate::asset::LoadState;
 use crate::params::MxmCreativeSamplerParams;
 use crate::telemetry::Telemetry;
 use crate::{EditorTask, MxmCreativeSampler};
 use egui::Ui;
 use mxm_creative_sampler_dsp::Sample;
+use mxm_creative_sampler_state::import;
 use mxm_ui::space::SPACE_5;
 use mxm_ui::theme::Tokens;
 use nice_plug::context::gui::GuiContext;
@@ -441,9 +442,10 @@ fn settle_action(revision: u64, handled: u64, status: &LoadState) -> SettleActio
 /// **Every write happens before the commit, root included.** Root used to be written after it, on
 /// the reasoning that deciding a pitch needs an audible sample — but the sample is *staged*, not
 /// absent, and `with_staged` reads it. Publishing first left a window of one or more audio
-/// callbacks in which the new source played at `NEUTRAL_ROOT`, C4, while every generated source is
-/// C3: a note held across a pick was heard an octave out for that window. That is the very failure
-/// the region defaults are ordered against, so the root belongs on the same side of the barrier.
+/// callbacks in which the new source played at `import::NEUTRAL_ROOT`, C4, while every generated
+/// source is C3: a note held across a pick was heard an octave out for that window. That is the very
+/// failure the region defaults are ordered against, so the root belongs on the same side of the
+/// barrier.
 fn settle(
     params: &MxmCreativeSamplerParams,
     setter: &ParamSetter<'_>,
@@ -468,9 +470,9 @@ fn settle(
             let arrived = params
                 .assets
                 .with_staged(|snapshot| {
-                    resolve_arrival(arrival, name, snapshot.samples[*layer].as_ref())
+                    import::resolve(arrival, name, snapshot.samples[*layer].as_ref())
                 })
-                .unwrap_or_else(|| resolve_arrival(arrival, name, None));
+                .unwrap_or_else(|| import::resolve(arrival, name, None));
             write_arrival(params, *layer, setter, &arrived);
             params.assets.mark_handled(revision);
             params.assets.commit_revision(revision);
@@ -482,175 +484,26 @@ fn settle(
     }
 }
 
-/// Every source-owned value an arrival writes, decided before any of it is written.
-#[derive(Debug, Clone, Copy, PartialEq)]
-struct Arrived {
-    /// Normalised Loop start and Loop end, or `None` for the parameters' own whole-file defaults.
-    loop_points: Option<(f32, f32)>,
-    /// The loop mode the source asks for, or `None` to leave the layer's.
-    loop_mode: Option<crate::params::LoopChoice>,
-    /// The crossfade in seconds the source asks for, or `None` to leave the layer's.
-    crossfade: Option<f32>,
-    /// Root, as a MIDI note, fractional.
-    root: f32,
-}
-
-/// What an arrival writes (`plans/plan-sampler-wav-loop-import.md` §1.2, §1.3).
-///
-/// **A generated source is built to loop**: every partial in [`crate::generate`] takes a whole number
-/// of cycles so the buffer joins to itself. Publishing one into a layer whose loop is off made the
-/// instrument contradict its own design — Repitch and Stretch played the buffer once and stopped while
-/// Grain kept sounding, because it never reads the loop — which is how it was reported. So it arrives
-/// Forward over the whole buffer.
-///
-/// **A file that carries a loop arrives looping at its own points**, in the mode its chunk names
-/// (owner, 2026-09-14: *they were made for looping*). **A file without one keeps the layer's loop
-/// mode and crossfade** — a drum hit that suddenly repeats is a worse defect than a waveform that
-/// does not — and its loop points go to the whole file, as every import's do.
-///
-/// **Both looping arrivals come with no crossfade.** A loop made to close is only harmed by a fade,
-/// which moves its return point off a whole cycle and fades against a cycle offset; the knob is
-/// there for a loop that was not made to close.
-///
-/// **Root: the loop's own pitch, then the key in the name, then C4** (owner, 2026-09-14, D4). The loop
-/// is measured on the task thread when the file is decoded, from the canonical audio a layer plays,
-/// exact to the cent, and only for a loop
-/// that repeats fast enough to be a pitch (`wav_loop::loop_pitch`). The name gives a pitch class and
-/// the audio its octave ([`root_in_name`]). Neither, and Root lands on [`NEUTRAL_ROOT`].
-fn resolve_arrival(
-    arrival: Arrival,
-    name: &str,
-    sample: Option<&mxm_creative_sampler_dsp::Sample>,
-) -> Arrived {
-    use crate::params::LoopChoice;
-    let named = || root_in_name(name, sample);
-    match arrival {
-        Arrival::Generated => Arrived {
-            loop_points: None,
-            loop_mode: Some(LoopChoice::Forward),
-            crossfade: Some(0.0),
-            root: named().unwrap_or(NEUTRAL_ROOT),
-        },
-        Arrival::File(None) => Arrived {
-            loop_points: None,
-            loop_mode: None,
-            crossfade: None,
-            root: named().unwrap_or(NEUTRAL_ROOT),
-        },
-        Arrival::File(Some(found)) => {
-            let last = found.frames.saturating_sub(1).max(1) as f32;
-            Arrived {
-                loop_points: Some((found.start as f32 / last, found.end as f32 / last)),
-                loop_mode: Some(if found.alternate {
-                    LoopChoice::Alternate
-                } else {
-                    LoopChoice::Forward
-                }),
-                crossfade: Some(0.0),
-                root: found.root.or_else(named).unwrap_or(NEUTRAL_ROOT),
-            }
-        }
-    }
-}
-
-/// Writes an arrival: **one complete host gesture per source-owned parameter**, each carrying its final
-/// value — the region, both loop points, Root, and the loop mode and crossfade where the arrival sets
-/// them.
+/// Writes an arrival: **one complete host gesture per source-owned parameter**, each carrying its
+/// final value — the region, both loop points, Root, and the loop mode and crossfade where the
+/// arrival sets them. What an arrival writes, and why, is the state crate's
+/// (`import::resolve`, `import::Arrived::writes`), so a state settles an import exactly as this does.
 fn write_arrival(
     params: &MxmCreativeSamplerParams,
     layer: usize,
     setter: &nice_plug::prelude::ParamSetter<'_>,
-    arrived: &Arrived,
+    arrived: &import::Arrived,
 ) {
-    let (start, end, loop_start, loop_end, loop_mode, crossfade, root) = if layer == 0 {
-        (
-            &params.a_start,
-            &params.a_end,
-            &params.a_loop_start,
-            &params.a_loop_end,
-            &params.a_loop,
-            &params.a_loop_crossfade,
-            &params.a_root,
-        )
-    } else {
-        (
-            &params.b_start,
-            &params.b_end,
-            &params.b_loop_start,
-            &params.b_loop_end,
-            &params.b_loop,
-            &params.b_loop_crossfade,
-            &params.b_root,
-        )
-    };
-    let write = |param: &dyn mxm_params::ErasedParam, normalised: f32| {
+    let parameters = mxm_preset::Instrument::parameters(params);
+    for (id, normalised) in arrived.writes(layer) {
+        let (_, param) = parameters
+            .iter()
+            .find(|(candidate, _)| *candidate == id)
+            .unwrap_or_else(|| panic!("an arrival writes `{id}`, which is not a parameter"));
         param.begin(setter);
         param.set(setter, normalised);
         param.end(setter);
-    };
-    write(start, mxm_params::ErasedParam::default_normalised(start));
-    write(end, mxm_params::ErasedParam::default_normalised(end));
-    let (from, to) = arrived.loop_points.unwrap_or((
-        mxm_params::ErasedParam::default_normalised(loop_start),
-        mxm_params::ErasedParam::default_normalised(loop_end),
-    ));
-    write(loop_start, from);
-    write(loop_end, to);
-    // Asked for by value rather than by a hand-written 0.5, so adding a fourth loop mode cannot
-    // silently re-point this at the wrong one.
-    if let Some(mode) = arrived.loop_mode {
-        write(loop_mode, loop_mode.preview_normalized(mode));
     }
-    if let Some(seconds) = arrived.crossfade {
-        write(crossfade, crossfade.preview_normalized(seconds));
-    }
-    // **Root does not go back to its parameter default, because A's default is the init saw's own
-    // pitch.** `a_root` starts at C3 so a fresh instance is in tune with the generated saw, and
-    // `b_root` at C4 because layer B has no saw to be in tune with. That is right until a file is
-    // dropped: the saw is gone, C3 means nothing to the new audio, and the same file dropped on A
-    // and on B came out an octave apart.
-    write(root, arrived.root / 127.0);
-}
-
-/// Where Root lands when an arrival says nothing better: C4, middle of the keyboard, and the
-/// convention Root itself displays, so an import is at least consistent.
-///
-/// Not either layer's parameter default — see [`write_arrival`].
-const NEUTRAL_ROOT: f32 = 60.0;
-
-/// Root from the key in the file's name, when the name carries one.
-///
-/// **A drop should arrive in tune when the file says how.** About one file in seven in a commercial
-/// library ends its name with a key. A file's `smpl` chunk comes first when its loop is a pitch
-/// ([`resolve_arrival`]); in that library the chunk's unity note is absent or set to zero — see
-/// [`crate::naming`] for the survey.
-///
-/// The name gives a pitch class and the audio gives the octave, because a name almost never carries
-/// one. That pairing is also what makes this better than either half: the class corrects the
-/// detector's whole-note mistakes, and the detector keeps the answer in the register the sample
-/// actually sits in.
-///
-/// A name with no key says nothing. **Nothing is guessed from the audio alone** — a detector's answer
-/// is confident on a bass note and wrong on a chord, and a wrong Root retunes the whole keyboard.
-/// That is what the Auto button is for: asked, not assumed. The one narrowing is a loop the file
-/// carries, whose length states the pitch (`wav_loop::loop_pitch`).
-fn root_in_name(name: &str, sample: Option<&mxm_creative_sampler_dsp::Sample>) -> Option<f32> {
-    let stem = std::path::Path::new(name)
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .unwrap_or(name);
-    // **The name is consulted before the audio, so an unpitched sample is never analysed.** Plenty
-    // of music is made from material that has no pitch at all, and running a detector over a drum
-    // loop on every drop is work whose answer is thrown away — or worse, kept. Detection happens
-    // only when a name has claimed a key and left out the octave, which is the one question the
-    // audio is actually being asked.
-    let tag = crate::naming::key_in_name(stem)?;
-    let heard = match tag.octave {
-        // A name that carries its octave is already a note; there is nothing to listen for.
-        Some(_) => None,
-        None => sample.and_then(|sample| mxm_creative_sampler_dsp::detect_root(sample, 0.0)),
-    };
-    Some(crate::naming::root_from_key(tag, heard))
 }
 
 fn tokens_for(ui: &Ui) -> Tokens {
@@ -667,6 +520,7 @@ fn tokens_for(ui: &Ui) -> Tokens {
 #[allow(dead_code)]
 mod tests {
     use super::*;
+    use crate::asset::Arrival;
     use crate::sections;
     use mxm_preset::PresetUi;
 
@@ -1274,6 +1128,137 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// **An import arrives through the state crate exactly as through the plugin**
+    /// (`plans/plan-web-tracker.md`, W4): the same payload and the same arrival, so the state a
+    /// program without the plugin imports into is the state the plugin writes after the same drop.
+    /// The plugin's side is the real path — a file decoded on the task thread, staged, then settled
+    /// by the editor through a host that applies each gesture — and the crate's is a file's bytes
+    /// arriving in a state read from the plugin's state before the drop. A file carrying a loop, a
+    /// file named for its key and a generated source, each onto a layer whose loop mode and
+    /// crossfade the arrival has something to change.
+    #[test]
+    fn an_import_arrives_through_the_state_crate_as_through_the_plugin() {
+        use mxm_creative_sampler_state::{State, import};
+        use nice_plug::params::InternalParamMut;
+
+        struct Applying;
+        impl nice_plug::context::gui::GuiContextInner for Applying {
+            fn request_restart(&self) {}
+            fn plugin_api(&self) -> nice_plug::prelude::PluginApi {
+                nice_plug::prelude::PluginApi::Clap
+            }
+            unsafe fn raw_begin_set_parameter(&self, _p: nice_plug::params::internals::ParamPtr) {}
+            unsafe fn raw_set_parameter_normalized(
+                &self,
+                p: nice_plug::params::internals::ParamPtr,
+                v: f32,
+            ) {
+                unsafe { p._internal_set_normalized_value(v) };
+            }
+            unsafe fn raw_end_set_parameter(&self, _p: nice_plug::params::internals::ParamPtr) {}
+            fn get_state(&self) -> nice_plug::prelude::PluginState {
+                nice_plug::prelude::PluginState {
+                    version: String::new(),
+                    params: Default::default(),
+                    fields: Default::default(),
+                }
+            }
+            fn set_state(&self, _: nice_plug::prelude::PluginState) {}
+        }
+
+        // A sine of 169-frame cycles at 44.1 kHz, about C4, with a `smpl` chunk when given one.
+        let wav = |chunk: Option<Vec<u8>>| {
+            let samples: Vec<f32> = (0..6_000u32)
+                .map(|n| (std::f32::consts::TAU * (n % 169) as f32 / 169.0).sin() * 0.6)
+                .collect();
+            let (mut bytes, _) = mxm_audio_file::encode(
+                &samples,
+                1,
+                44_100,
+                mxm_audio_file::Target::Wav(mxm_audio_file::Bits::Sixteen),
+            )
+            .unwrap();
+            if let Some(body) = chunk {
+                bytes.extend_from_slice(b"smpl");
+                bytes.extend_from_slice(&(body.len() as u32).to_le_bytes());
+                bytes.extend_from_slice(&body);
+                let riff = (bytes.len() - 8) as u32;
+                bytes[4..8].copy_from_slice(&riff.to_le_bytes());
+            }
+            bytes
+        };
+        // One back-and-forth loop over the first cycle, its unity note C4.
+        let mut smpl = vec![0u8; 36];
+        smpl[12..16].copy_from_slice(&60u32.to_le_bytes());
+        smpl[28..32].copy_from_slice(&1u32.to_le_bytes());
+        for word in [0u32, 1, 0, 168, 0, 0] {
+            smpl.extend_from_slice(&word.to_le_bytes());
+        }
+
+        let dir = std::env::temp_dir().join(format!(
+            "mxm-creative-sampler-w4-import-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).expect("a scratch folder");
+        let host = Applying;
+        let setter = ParamSetter::new(&host);
+        enum Source {
+            File(&'static str, Vec<u8>),
+            Generated(crate::generate::Recipe),
+        }
+        for (layer, source) in [
+            (0, Source::File("cycle.wav", wav(Some(smpl.clone())))),
+            (1, Source::File("pad_F.wav", wav(None))),
+            (1, Source::Generated(crate::generate::Recipe::Drawbars)),
+        ] {
+            let params = MxmCreativeSamplerParams::default();
+            let (mode, crossfade) = if layer == 0 {
+                (&params.a_loop, &params.a_loop_crossfade)
+            } else {
+                (&params.b_loop, &params.b_loop_crossfade)
+            };
+            unsafe {
+                mode._internal_set_plain_value(crate::params::LoopChoice::Off);
+                crossfade._internal_set_plain_value(0.25);
+            }
+            let before = crate::state_json(&params);
+            let mut state = State::from_json(&before).expect("the plugin's state reads");
+            let what = match source {
+                Source::File(name, bytes) => {
+                    let path = dir.join(name);
+                    std::fs::write(&path, &bytes).unwrap();
+                    params
+                        .assets
+                        .import_wav(layer, &path)
+                        .expect("the file imports");
+                    let imported = import::decode_bytes(name, &bytes).expect("the bytes import");
+                    state.arrive(layer, imported).expect("the import arrives");
+                    name.to_owned()
+                }
+                Source::Generated(recipe) => {
+                    params.assets.generate_source(layer, recipe).unwrap();
+                    state.generate(layer, recipe).unwrap();
+                    recipe.name()
+                }
+            };
+            settle(
+                &params,
+                &setter,
+                params.assets.revision(),
+                &params.assets.status(),
+                SettleAction::WriteThenCommit,
+            );
+            let plugin = crate::state_json(&params);
+            let arrived = state.to_json();
+            assert!(
+                plugin == arrived,
+                "{what} on layer {layer}: {}",
+                crate::first_difference(&plugin, &arrived)
+            );
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// **A drop arrives in tune when its name says how**, which is the gesture this wiring exists
     /// for and the half a unit test on the parser cannot reach.
     #[test]
@@ -1282,7 +1267,7 @@ mod tests {
         // Which note it names is `naming::the_octave_comes_from_what_was_heard`'s to hold, the ten
         // real files in `examples/measure_root.rs` are the end-to-end evidence, and that an arrival
         // writes Root exactly once is `an_arrival_writes_each_parameter_once_with_its_final_value`'s.
-        let wrote = |name: &str| root_in_name(name, None).is_some();
+        let wrote = |name: &str| import::root_in_name(name, None).is_some();
 
         for named in [
             "OS_VV2_bass_soul_E.wav",

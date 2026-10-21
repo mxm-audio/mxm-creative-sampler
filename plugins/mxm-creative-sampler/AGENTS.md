@@ -23,22 +23,29 @@ This folder owns the plugin crate: `src/`, `presets/`, `examples/`, `host-tests/
 through MXM Player) and `README.md`; the licence is the repository's `LICENSE`. What each source
 file holds: [NOTES.md § File map](NOTES.md#file-map). Placement rules:
 
-- `src/init.rs` is the one declarative, compiled-in Init patch (sources, defaults, route state);
-  `src/params.rs` holds ids, ranges and display laws and reads its defaults from it.
+- **What a state means is the state crate's** (`crates/mxm-creative-sampler-state`, shared with the
+  web tracker): the Init patch (`init::PATCH`), the parameter table (ids, names, travel, defaults,
+  units, smoothing, text both ways), the payload, the import and its arrival, and the mapping onto
+  the DSP (`Sound::dsp`, which `next_params` calls every sample). `src/params.rs` builds every
+  parameter from the table and holds what nice-plug needs written out: the `#[id]` attributes and
+  the choice enums (`every_parameter_is_the_tables`, `every_choice_is_the_tables`).
 - `src/routes.rs` holds the routing pairs' parameters, ids derived from one
-  `#[nested(id_prefix = …)]` per target.
+  `#[nested(id_prefix = …)]` per target, each amount built by the kit's `amount_param_at` from the
+  table's name, Init, reach and fader.
 - `presets/` — the four recipe files. Generated, never hand-edited: change the design in
   `src/preset.rs` and rerun the ignored `rewrite_factory_files`.
-- `src/asset.rs` owns import, the canonical payload, three-slot publication, off-audio reclamation
-  and every fallible reservation. `editor::panel` takes its host and asset dependencies as
-  arguments, so the keyboard-cursor check can paint it headlessly.
+- `src/asset.rs` owns publication: three slots, off-audio reclamation, and staging an import, a
+  generated source or a preset with its arrival record. The payload, its checks and its fallible
+  reservations are the state crate's `payload`, the import its `import`. `editor::panel` takes its
+  host and asset dependencies as arguments, so the keyboard-cursor check can paint it headlessly.
 
 # Local Contracts
 
 ## Identity and provisional controls
 
-Product name: `mxm-creative-sampler`; CLAP id: `dk.mxm.mxm-creative-sampler`. `plugin_name!` is the
-one crate-local literal and `bundler.toml` is the one external duplicate, pinned by a test.
+Product name: `mxm-creative-sampler`; CLAP id: `dk.mxm.mxm-creative-sampler`. `NAME` and `CLAP_ID`
+are the state crate's, whose `plugin_name!` is the one literal; `bundler.toml` is the one external
+duplicate, pinned by a test.
 
 **All parameter ids are provisional until the S3 owner listening gate.** The plugin is undistributed
 and this playable surface exists so that gate can happen. Fix the ids and control-map roles in the
@@ -53,19 +60,24 @@ same pass that records approval; do not claim backwards compatibility before the
 - Three A/B snapshot slots. The callback borrows one under a reader count: no `Arc` traffic, lock,
   allocation, decoding or destruction. `unsafe` in `asset.rs` expresses only that slot protocol.
 - State is one schema-1 `samples` field; `Plugin::filter_state` parses and bounds it first, and
-  malformed state becomes a no-op. Paths never enter state; the chunk never enters the payload.
-- Import decodes by content, quantises once to canonical stereo i16, and on any failure keeps the
-  current sound and names the error. `MAX_FRAMES_PER_LAYER` is provisional. Open: Browse and the
-  hints still say WAV.
-- Every buffer a restore, preset or import sizes is reserved fallibly (`asset::reserve`,
-  `reserve_text`); a refusal changes nothing. Payloads are validated in place and decoded once.
+  malformed state becomes a no-op. **The whole state is the state crate's to read and write**
+  (`State`), byte for byte as nice-plug saves it
+  (`a_state_the_plugin_writes_reads_into_what_it_plays_and_writes_back_equal`). Paths never enter
+  state; the chunk never enters the payload.
+- Import (the state crate's `import::decode_file`) decodes by content, quantises once to canonical
+  stereo i16, and on any failure keeps the current sound and names the error.
+  `MAX_FRAMES_PER_LAYER` is provisional. Open: Browse and the hints still say WAV.
+- Every buffer a restore, preset or import sizes is reserved fallibly (the state crate's
+  `payload::reserve`, `reserve_text`; the refusal tests enable its `refusal` feature from
+  `[dev-dependencies]`); a refusal changes nothing. Payloads are validated in place and decoded
+  once.
 
 ## Parameters, Init and generated sources ([NOTES.md § Parameters](NOTES.md#parameters-init-and-generated-sources))
 
 - The ten source-owned ids (`Instrument::is_source_owned`) describe a recording; `Preset::resolve`
   skips them for a `state = null` preset. The loop crossfade is not source-owned; Init's is zero.
 - Init and recipes preserve the loaded A/B payload; user saves, bank exports and host state carry
-  it. `src/init.rs::PATCH` is Init's only declaration, and Init has no file
+  it. The state crate's `init::PATCH` is Init's only declaration, and Init has no file
   (`init_uses_the_current_live_sound_declared_in_one_patch`).
 - A fresh instance is playable: `asset::default_source` publishes the static Init saw to A. Its
   frame and cycle counts are fixed by whole cycles, a whole MIDI note and the band limit
@@ -76,8 +88,9 @@ same pass that records approval; do not claim backwards compatibility before the
 - The picker is the shared caret `selector`, derived from the loaded source's name; it stages off
   the UI thread and is disabled while a load is in flight.
 
-Adding a parameter must update the `#[id]` field/builder in `params.rs`, the declaration table and
-count assertion in `preset.rs`, the `Bound` list/card row in `sections.rs`, and `layer_only` in
+Adding a parameter must update the state crate's table (its `params.rs`; `sound.rs` and
+`State::sound` if the DSP reads it), the `#[id]` field/builder in `params.rs`, the declaration table
+and count assertion in `preset.rs`, the `Bound` list/card row in `sections.rs`, and `layer_only` in
 `editor.rs`. `every_parameter_is_bound_exactly_once` guards the hand-written lists.
 
 ## Arrival and Root ([NOTES.md § Root, arrival and loops](NOTES.md#root-arrival-and-loops))
@@ -88,8 +101,10 @@ count assertion in `preset.rs`, the `Bound` list/card row in `sections.rs`, and 
 | A WAV with a usable loop | defaults | its frames | Forward or Alternate | 0 | the loop's pitch, else the name's key, else C4 |
 | A WAV without one | defaults | whole file | the layer's | the layer's | the name's key, else C4 |
 
-- `editor::resolve_arrival` decides from the staged sample (`AssetBank::with_staged`);
-  `write_arrival` writes each value as one complete gesture before commit; failure writes nothing.
+- The state crate's `import::resolve` decides from the staged sample (`AssetBank::with_staged`);
+  `editor::write_arrival` writes each of its `Arrived::writes` as one complete gesture before
+  commit; failure writes nothing. A state settles an import the same way
+  (`an_import_arrives_through_the_state_crate_as_through_the_plugin`).
   `asset::Arrival` belongs to its revision. `settle_arrivals`/`params::settle_source` make a new
   source final on the first callback that hears it; a publication replacing both layers records both.
 - `wav_loop::read_loop` reads a WAV's `smpl` loop on the task thread, bounded, never failing an
@@ -164,7 +179,7 @@ count assertion in `preset.rs`, the `Bound` list/card row in `sections.rs`, and 
 
 - Parameter text is idempotent through the host: every `value_to_string` has a `string_to_value`,
   branches partition the travel and decide on the finer reading's rounding, one rounding feeds one
-  reading, no negative zero (`every_parameter_round_trips_its_own_text`).
+  reading, no negative zero (`every_parameter_text_survives_the_hosts_round_trip`).
 - Stretch's search bounds stay ordered at `MIN_REGION_FRAMES`; `param-fuzz-basic` stays in the gate.
 - No Blend, macros, Nudge, undo or editor locks: every panel control is a host parameter.
 

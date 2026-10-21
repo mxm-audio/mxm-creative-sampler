@@ -1,46 +1,27 @@
 //! Provisional host parameters for the pre-listening `mxm-creative-sampler` slice.
+//!
+//! **Every parameter is built from the state crate's table** (`mxm_creative_sampler_state::params`):
+//! its name, travel, default, unit, smoothing and its text both ways. What is left here is what
+//! nice-plug needs written out — the `#[id]` attributes, the choice enums — and how the plugin reads
+//! its parameters on the audio thread. `every_parameter_is_the_tables` holds the two together, the
+//! ids in the order a host lists them included.
 
 use crate::asset::AssetField;
-use mxm_creative_sampler_dsp::{FilterMode, LayerParams, LoopMode, Reader, VoiceMode};
+use mxm_creative_sampler_dsp::{FilterMode, LoopMode, Reader, VoiceMode};
+use mxm_creative_sampler_state::params::{self as table, Kind, LAYERS, Smoothing, TEMPO_SYNCS, id};
+use mxm_creative_sampler_state::range::Range;
+use mxm_creative_sampler_state::sound;
 use mxm_preset::PresetIdentity;
 use nice_plug::prelude::*;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, RwLock};
 
-/// How the one sample-dependent converter stage reads a value, and reads one back.
-///
-/// Owned closures rather than `fn` pointers because both ends have to consult the loaded sample's
-/// rate; aliased because the pair written out in full is past what clippy will read as one type.
-type StageReading = Box<dyn Fn(f32) -> String + Send + Sync>;
-type StageParser = Box<dyn Fn(&str) -> Option<f32> + Send + Sync>;
-
-/// The source rate the converter's readout is quoted against, in hertz.
-///
-/// **The loaded sample's rate, never the host's.** A patch has to sound the same at 44.1 and 96 kHz,
-/// and it does: the converter's grid is counted in *source frames*, so its rate works out to
-/// `pitch_ratio × source_rate / grid` and the host rate cancels out of the arithmetic entirely.
-/// Quoting the readout against the host rate would therefore be showing a number the audio does not
-/// depend on — the one way this display could lie about a preset.
-///
-/// It is an atomic rather than a read of [`AssetField`] because the formatter is a closure built in
-/// `Default::default()`, before the field it would need to borrow exists. 48 kHz is the rate every
-/// generated source is built at, so the value is right before anything is loaded — it read 44.1 kHz
-/// until 2026-09-13, which was the one thing this display exists to stop it doing.
-pub const DEFAULT_SOURCE_RATE: u32 = 48_000;
-
-/// `text` without the sign of a negative zero.
-///
-/// `{:.N}` prints `-0` or `-0.00` for a value a hair below zero. A host parses that to zero and
-/// prints it unsigned, so the reading would not survive the host's round trip — and
-/// `clap-validator`'s `param-conversions` fails whenever its grid lands in the sliver. Only a
-/// reading that shows zero changes; `mxm_params::text::signed` is the same rule for a reading
-/// that carries a `+`.
-fn unsigned_zero(text: String) -> String {
-    match text.strip_prefix('-') {
-        Some(digits) if digits.bytes().all(|b| b == b'0' || b == b'.') => digits.to_owned(),
-        _ => text,
-    }
-}
+pub use mxm_creative_sampler_state::params::{GRAIN_SYNC, LFO_SYNC};
+/// The source rate the converter's readout is quoted against: see the state crate's
+/// [`DEFAULT_SOURCE_RATE`]. It is an atomic here, [`MxmCreativeSamplerParams::source_rate`], rather
+/// than a read of [`AssetField`], because the reading is a closure built in `Default::default()`,
+/// before the field it would need to borrow exists.
+pub use mxm_creative_sampler_state::text::DEFAULT_SOURCE_RATE;
 
 #[derive(Enum, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReaderChoice {
@@ -148,11 +129,8 @@ impl ShapeChoice {
     }
 }
 
-/// Which converter the voice's DAC is. See [`mxm_creative_sampler_dsp::ConverterType`].
-///
-/// **Named for the machines, not for the mathematics.** mxm-kit's `docs/oscillators/14-samplers.md`
-/// §14.1: the vintage DAC names are companding parts rather than resolutions, and the card already
-/// reads in the numbers those machines were sold on.
+/// Which converter the voice's DAC is. See [`mxm_creative_sampler_dsp::ConverterType`] and the
+/// state crate's `sound::CONVERTER_TYPES`, which says why it is named for the machines.
 #[derive(Enum, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConverterChoice {
     #[id = "linear"]
@@ -198,18 +176,6 @@ impl FilterChoice {
         }
     }
 }
-
-/// **The LFO rate's tempo sync** (`plans/plan-tempo-sync-controls.md`): every LFO's ladder, 1/32 to
-/// four bars, the top the fastest.
-pub const LFO_SYNC: mxm_tempo::Ladder =
-    mxm_tempo::Ladder::new(mxm_tempo::Span::LFO, mxm_tempo::Direction::Rate);
-
-/// **A grain rate's tempo sync**: 1/64 to a whole note, the slice of the ladder a grain rate's
-/// 0.5 – 200 per second holds at 120 bpm, the top the fastest.
-pub const GRAIN_SYNC: mxm_tempo::Ladder = mxm_tempo::Ladder::new(
-    mxm_tempo::Span::new(mxm_tempo::Division::SixtyFourth, mxm_tempo::Division::Whole),
-    mxm_tempo::Direction::Rate,
-);
 
 #[derive(Params)]
 pub struct MxmCreativeSamplerParams {
@@ -392,595 +358,160 @@ impl MxmCreativeSamplerParams {
     }
 }
 
+/// The table's entry for `id`, which the table holds: a parameter field is built from its own id.
+fn spec(id: &str) -> &'static table::Param {
+    table::get(id).unwrap_or_else(|| panic!("`{id}` is not in the state crate's table"))
+}
+
+/// A travel as nice-plug's range.
+pub(crate) fn float_range(range: Range) -> FloatRange {
+    match range {
+        Range::Linear { min, max } => FloatRange::Linear { min, max },
+        Range::Skewed { min, max, factor } => FloatRange::Skewed { min, max, factor },
+        Range::SymmetricalSkewed {
+            min,
+            max,
+            factor,
+            center,
+        } => FloatRange::SymmetricalSkewed {
+            min,
+            max,
+            factor,
+            center,
+        },
+    }
+}
+
+/// A continuous parameter, **everything about it from the table**: name, travel, step, default,
+/// unit, smoothing, and its reading and parser.
+///
+/// **A reading and its parser are one thing, so both come from the same entry**: a `FloatParam`
+/// without `string_to_value` falls back to "strip `with_unit`, then `parse`", which a reading whose
+/// unit is part of its own text does not survive, and `param-conversions` fails the whole plugin on
+/// that. Both read the loaded sample's rate, which only Sample rate's reading uses.
+fn float(id: &str, source_rate: &Arc<AtomicU32>) -> FloatParam {
+    let param = spec(id);
+    let float = param
+        .float()
+        .unwrap_or_else(|| panic!("`{id}` is not continuous"));
+    let shown = Arc::clone(source_rate);
+    let parsed = Arc::clone(source_rate);
+    let mut built = FloatParam::new(param.name.as_str(), float.default, float_range(float.range))
+        .with_unit(float.unit)
+        .with_value_to_string(Arc::new(move |plain| {
+            float.show(plain, shown.load(Ordering::Relaxed))
+        }))
+        .with_string_to_value(Arc::new(move |text| {
+            float.read(text, parsed.load(Ordering::Relaxed))
+        }));
+    if let Some(step) = float.step {
+        built = built.with_step_size(step);
+    }
+    match float.smoothing {
+        Smoothing::None => built,
+        Smoothing::Linear(ms) => built.with_smoother(SmoothingStyle::Linear(ms)),
+        Smoothing::Logarithmic(ms) => built.with_smoother(SmoothingStyle::Logarithmic(ms)),
+    }
+}
+
+/// A switch, its name, default and text both ways from the table.
+pub(crate) fn switch(id: &str) -> BoolParam {
+    let param = spec(id);
+    let Kind::Switch(switch) = &param.kind else {
+        panic!("`{id}` is not a switch");
+    };
+    let reading = switch.reading;
+    BoolParam::new(param.name.as_str(), switch.default)
+        .with_value_to_string(Arc::new(move |on| reading.show(on)))
+        .with_string_to_value(Arc::new(move |text| reading.read(text)))
+}
+
+/// A choice, its name and default from the table. Its variants' ids and names are the enum's own,
+/// which nice-plug's derive needs written out; `every_choice_is_the_tables` holds them.
+fn choice<T: Enum + PartialEq + 'static>(id: &str) -> EnumParam<T> {
+    let param = spec(id);
+    let Kind::Choice(choice) = &param.kind else {
+        panic!("`{id}` is not a choice");
+    };
+    EnumParam::new(param.name.as_str(), T::from_index(choice.default))
+}
+
 impl Default for MxmCreativeSamplerParams {
     fn default() -> Self {
-        // **One declaration owns the whole Init sound.** These constructors still define each
-        // parameter's range and display law, but every default value comes from the same protected
-        // patch the generated source and routing parameters read.
-        let init = &crate::init::PATCH;
-        let a = init.layers[0];
-        let b = init.layers[1];
-
-        // **A percentage carries its unit** — design system §7, *"units are part of the formatted
-        // value"*. Every one of these used to render as a bare integer, so Master read `80`.
-        let percent = |name: &str, default: f32| {
-            FloatParam::new(name, default, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_smoother(SmoothingStyle::Linear(20.0))
-                .with_unit("%")
-                .with_value_to_string(formatters::v2s_f32_percentage(0))
-                .with_string_to_value(formatters::s2v_f32_percentage())
-        };
-        // Skewed: the slow end is where a drift lives and the fast end is an effect.
-        let lfo_rate = |name: &str, default: f32| {
-            FloatParam::new(
-                name,
-                default,
-                FloatRange::Skewed {
-                    min: 0.01,
-                    max: 40.0,
-                    factor: FloatRange::skew_factor(-1.5),
-                },
-            )
-            .with_smoother(SmoothingStyle::Logarithmic(30.0))
-            .with_unit(" Hz")
-            .with_value_to_string(formatters::v2s_f32_rounded(2))
-        };
-        let bipolar = |name: &str, default: f32| {
-            FloatParam::new(
-                name,
-                default,
-                FloatRange::Linear {
-                    min: -1.0,
-                    max: 1.0,
-                },
-            )
-            .with_smoother(SmoothingStyle::Linear(20.0))
-            // A bipolar percentage carries its unit too, and its sign: design system §8.5 wants a
-            // centre reference and an explicit signed value on a bipolar depth. **Never a negative
-            // zero**: `v2s_f32_percentage` printed `-0` a hair left of centre, which parses to zero
-            // and prints `0`.
-            .with_unit("%")
-            .with_value_to_string(Arc::new(|value| {
-                unsigned_zero(format!("{:.0}", value * 100.0))
-            }))
-            .with_string_to_value(formatters::s2v_f32_percentage())
-        };
-        let root = |name: &str, default: f32| {
-            FloatParam::new(
-                name,
-                default,
-                FloatRange::Linear {
-                    min: 0.0,
-                    max: 127.0,
-                },
-            )
-            // **Fractional** (owner, 2026-09-14, D6): a loop that plays between notes is tuned to the
-            // cent, which a whole-note step could not hold. The editor's drag still steps by whole
-            // notes; see `sections::all_parameters`.
-            .with_value_to_string(Arc::new(|value| {
-                // Whole notes read exactly as they always have; cents appear only off a note.
-                //
-                // **Everything is read off one rounding, the whole cents**: the note, the cents
-                // beside it and the number after the dot. The note was rounded from the raw value
-                // and the cents and number separately, so 59.496 read `B3 +50 ct` and parsed to
-                // 59.5, which reads `C4 −50 ct`; and 0.005 read `+1 ct · 0.00` and came back
-                // `+1 ct · 0.01`. A host's round trip changed the text both times.
-                let total = (value * 100.0).round();
-                let note = (total / 100.0).round();
-                let cents = total - note * 100.0;
-                if cents == 0.0 {
-                    format!("{} · {:.0}", note_name(note), note)
-                } else {
-                    let sign = if cents < 0.0 { '\u{2212}' } else { '+' };
-                    format!(
-                        "{} {sign}{:.0} ct · {:.2}",
-                        note_name(note),
-                        cents.abs(),
-                        total / 100.0
-                    )
-                }
-            }))
-            .with_string_to_value(Arc::new(|text| {
-                let text = text.trim();
-                // The formatter writes `C3 \u{b7} 48` or `C4 −25 ct \u{b7} 59.75`, so a typed note
-                // name — with its cents, if it has any — arrives with the number after it: take the
-                // name first, then the number after the dot, then a bare number.
-                let mut parts = text.split('\u{b7}');
-                if let Some(note) = parts.next().and_then(parse_note_with_cents) {
-                    return Some(note);
-                }
-                if let Some(number) = parts
-                    .next()
-                    .and_then(|rest| rest.trim().parse::<f32>().ok())
-                {
-                    return Some(number);
-                }
-                text.trim_start_matches("MIDI").trim().parse::<f32>().ok()
-            }))
-        };
-
-        /// A note name with optional cents after it — `C4`, `C4 −25 ct`, `c#3 +10ct` — as MIDI.
-        fn parse_note_with_cents(text: &str) -> Option<f32> {
-            let text = text.trim();
-            let (name, cents) = match text.find(char::is_whitespace) {
-                Some(at) => (&text[..at], text[at..].trim()),
-                None => (text, ""),
-            };
-            let note = parse_note_name(name)?;
-            if cents.is_empty() {
-                return Some(note);
-            }
-            let cents: f32 = cents
-                .trim_end_matches("ct")
-                .trim()
-                .replace('\u{2212}', "-")
-                .parse()
-                .ok()?;
-            let value = note + cents / 100.0;
-            (0.0..=127.0).contains(&value).then_some(value)
-        }
-        /// A MIDI number as a note name, **C4 = 60**.
-        ///
-        /// The collection currently disagrees with itself: `mxm-poly-06` uses this convention and
-        /// `mxm-player`'s sequencer uses one an octave below, where 60 is C3. This follows poly-06, which
-        /// is the one that makes the generated init source — MIDI 48, and audibly a C — read as C3.
-        fn note_name(value: f32) -> String {
-            const NAMES: [&str; 12] = [
-                "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
-            ];
-            let note = value.round().clamp(0.0, 127.0) as i32;
-            format!("{}{}", NAMES[(note % 12) as usize], note / 12 - 1)
-        }
-
-        /// The inverse, so a note name can be typed into the field that shows one.
-        fn parse_note_name(text: &str) -> Option<f32> {
-            const NAMES: [&str; 12] = [
-                "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
-            ];
-            let text = text.trim();
-            let split = text.find(|c: char| c.is_ascii_digit() || c == '-')?;
-            let (name, octave) = text.split_at(split);
-            let name = name.trim().to_ascii_uppercase();
-            let index = NAMES.iter().position(|n| *n == name)?;
-            let octave: i32 = octave.trim().parse().ok()?;
-            let note = (octave + 1) * 12 + index as i32;
-            (0..=127).contains(&note).then_some(note as f32)
-        }
-
-        let tune = |name: &str, default: f32| {
-            FloatParam::new(
-                name,
-                default,
-                FloatRange::Linear {
-                    min: -24.0,
-                    max: 24.0,
-                },
-            )
-            .with_smoother(SmoothingStyle::Linear(20.0))
-            .with_unit(" st")
-            .with_value_to_string(formatters::v2s_f32_rounded(2))
-        };
-        let direction = |name: &str, default: bool| {
-            // **A formatter needs its reader.** `param-conversions` round-trips every value through
-            // `value_to_string` and back: without a parser the default reader answers 0.0 for
-            // "Reverse", so the label came back as "Forward" and the validator failed the plugin.
-            // `mxm-grain-fx` met exactly this with Freeze and recorded it under *Validator quirks
-            // this plugin met*; it was live here the whole time because nothing ran the validator
-            // over this bundle after the parameter landed.
-            BoolParam::new(name, default)
-                .with_value_to_string(Arc::new(|reverse| {
-                    if reverse { "Reverse" } else { "Forward" }.to_owned()
-                }))
-                .with_string_to_value(Arc::new(|text| {
-                    match text.trim().to_ascii_lowercase().as_str() {
-                        "reverse" | "true" | "on" | "1" => Some(true),
-                        "forward" | "false" | "off" | "0" => Some(false),
-                        _ => None,
-                    }
-                }))
-        };
-        let travel = |name: &str, default: f32| {
-            FloatParam::new(
-                name,
-                default,
-                FloatRange::Linear {
-                    min: -2.0,
-                    max: 2.0,
-                },
-            )
-            .with_smoother(SmoothingStyle::Linear(30.0))
-            // A rate against the source's own: 1x plays it at its recorded speed, 0 holds it, and
-            // a negative one runs it backwards. It was the last value on the surface reading as a
-            // bare number. Never a negative zero, which a host round-trips to `0.00x`.
-            .with_value_to_string(Arc::new(|rate| {
-                format!("{}x", unsigned_zero(format!("{rate:.2}")))
-            }))
-            .with_string_to_value(Arc::new(|text| {
-                text.trim().trim_end_matches(['x', 'X']).trim().parse().ok()
-            }))
-        };
-        let grain_size = |name: &str, default: f32| {
-            FloatParam::new(
-                name,
-                default,
-                FloatRange::Skewed {
-                    min: 0.008,
-                    max: 1.0,
-                    factor: FloatRange::skew_factor(-1.8),
-                },
-            )
-            .with_smoother(SmoothingStyle::Linear(30.0))
-            .with_unit(" s")
-            .with_value_to_string(formatters::v2s_f32_rounded(3))
-        };
-        let grain_rate = |name: &str, default: f32| {
-            FloatParam::new(
-                name,
-                default,
-                FloatRange::Skewed {
-                    min: 0.5,
-                    max: mxm_creative_sampler_dsp::MAX_GRAIN_DENSITY_HZ,
-                    factor: FloatRange::skew_factor(-1.4),
-                },
-            )
-            .with_smoother(SmoothingStyle::Linear(30.0))
-            .with_unit(" /s")
-            .with_value_to_string(formatters::v2s_f32_rounded(1))
-        };
-        // Skewed hard toward the bottom: a section of players is a few cents apart, and the top of
-        // this range is a chord. Without the skew the musical part of the control is the first
-        // pixel.
-        let spread = |name: &str, default: f32| {
-            FloatParam::new(
-                name,
-                default,
-                FloatRange::Skewed {
-                    min: 0.0,
-                    max: mxm_creative_sampler_dsp::MAX_GRAIN_SPREAD_ST,
-                    factor: FloatRange::skew_factor(-2.2),
-                },
-            )
-            .with_smoother(SmoothingStyle::Linear(30.0))
-            .with_unit(" st")
-            .with_value_to_string(formatters::v2s_f32_rounded(2))
-        };
-        // **A converter stage reads as the number the machine was sold on**, not as a percentage of
-        // a knob. Eight bits and twenty kilohertz are what a Fairlight or an Emulator is remembered
-        // by, and design system §7 already asks for the unit to be part of the value. The laws live
-        // in the DSP and are called here, so the panel cannot drift from what the audio does.
-        // **The window is a tone control, so it reads as one.** The three landmarks are named and
-        // everything between them is a percentage, exactly as `mxm-grain-fx` does it: "Hard" is a
-        // near-boxcar and audibly clicky, "Triangle" is the midpoint, "Smooth" is an exact Hann.
-        // A bare "62%" says nothing about how a grain sounds; "Triangle" does.
-        let grain_shape = |name: &str, default: f32| {
-            FloatParam::new(name, default, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_smoother(SmoothingStyle::Linear(20.0))
-                .with_value_to_string(Arc::new(|v: f32| match (v * 100.0).round() as i32 {
-                    0 => "Hard".to_owned(),
-                    50 => "Triangle".to_owned(),
-                    100 => "Smooth".to_owned(),
-                    p => format!("{p}%"),
-                }))
-                .with_string_to_value(Arc::new(|text: &str| {
-                    match text.trim().to_ascii_lowercase().as_str() {
-                        "hard" => Some(0.0),
-                        "triangle" => Some(0.5),
-                        "smooth" => Some(1.0),
-                        other => other
-                            .trim_end_matches('%')
-                            .trim()
-                            .parse::<f32>()
-                            .ok()
-                            .map(|v| v / 100.0),
-                    }
-                }))
-        };
-        // **A reading and its parser are one thing, so the builder takes both.** These four stages
-        // shipped with formatters and no readers, and a `FloatParam` without `string_to_value`
-        // falls back to "strip `with_unit`, then `parse`" — which none of these four outputs
-        // survive, because their units are part of a hand-written `format!`. `param-conversions`
-        // fails the whole plugin on that, and it did. The earlier signature made the omission easy:
-        // it had nowhere to put a parser, so leaving one out did not look like leaving anything
-        // out. The parsers below invert the published `character_*` laws, and
-        // `every_parameter_round_trips_its_own_text` holds each against its own formatter, so a law
-        // that changes without its inverse fails a test rather than a validator run nobody made.
-        let converter_stage =
-            |name: &str, default: f32, show: fn(f32) -> String, read: fn(&str) -> Option<f32>| {
-                FloatParam::new(name, default, FloatRange::Linear { min: 0.0, max: 1.0 })
-                    .with_smoother(SmoothingStyle::Linear(20.0))
-                    .with_value_to_string(Arc::new(show))
-                    .with_string_to_value(Arc::new(read))
-            };
-        // The same, for a stage whose reading depends on the loaded sample and so needs closures
-        // that own something rather than plain fn pointers.
-        let converter_stage_shared =
-            |name: &str, default: f32, show: StageReading, read: StageParser| {
-                FloatParam::new(name, default, FloatRange::Linear { min: 0.0, max: 1.0 })
-                    .with_smoother(SmoothingStyle::Linear(20.0))
-                    .with_value_to_string(Arc::from(show))
-                    .with_string_to_value(Arc::from(read))
-            };
+        // **One declaration owns the whole Init sound**: every default comes from the state crate's
+        // `init::PATCH`, through its table, as the generated source and the routes do.
         let source_rate = Arc::new(AtomicU32::new(DEFAULT_SOURCE_RATE));
-        // **A loop crossfade reads in the unit a fade is heard in**: milliseconds where a seam is being
-        // smoothed, seconds where a loop is being blurred into itself. The branch is decided on the
-        // rounded millisecond reading, so the two units partition the travel and every reading has one
-        // value behind it — the rule Bit smoothing's formatter had to learn. Smoothed like the loop
-        // points, because it moves the same geometry they do, the return point included.
-        let crossfade = |name: &str, default: f32| {
-            FloatParam::new(
-                name,
-                default,
-                FloatRange::Skewed {
-                    min: 0.0,
-                    max: mxm_creative_sampler_dsp::MAX_LOOP_CROSSFADE_S,
-                    factor: FloatRange::skew_factor(-2.0),
-                },
-            )
-            .with_smoother(SmoothingStyle::Linear(20.0))
-            .with_value_to_string(Arc::new(|seconds: f32| {
-                let ms = (seconds * 10_000.0).round() / 10.0;
-                if ms < 1_000.0 {
-                    format!("{ms:.1} ms")
-                } else {
-                    format!("{seconds:.2} s")
-                }
-            }))
-            .with_string_to_value(Arc::new(|text: &str| {
-                let text = text.trim().to_ascii_lowercase();
-                if let Some(ms) = text.strip_suffix("ms") {
-                    return ms.trim().parse::<f32>().ok().map(|ms| ms / 1_000.0);
-                }
-                text.trim_end_matches('s').trim().parse::<f32>().ok()
-            }))
-        };
-        let cutoff = FloatParam::new(
-            "Cutoff",
-            init.filter.cutoff_hz,
-            FloatRange::Skewed {
-                min: 20.0,
-                max: 22_000.0,
-                factor: FloatRange::skew_factor(-2.2),
-            },
-        )
-        .with_smoother(SmoothingStyle::Logarithmic(30.0))
-        // **2.7 kHz, not 2693.** The unit belongs in the value, and a four-digit number was the
-        // half of the truncation defect that a wider knob column does not fix.
-        //
-        // **Kilohertz from the rounded tenth of a hertz, not from the raw value.** nice-plug's
-        // `v2s_f32_hz_then_khz` switches at a raw 1000, so a cutoff a hair above it read `1.0 kHz`,
-        // parsed to a thousand hertz whose normalized inverse lands just under it, and came back
-        // `1000.0 Hz`. Deciding on the tenth the hertz branch prints makes every reading of a
-        // thousand hertz `1.0 kHz`. The same readings as before everywhere else; the vendor parser,
-        // which takes either unit, is kept.
-        .with_value_to_string(Arc::new(|hz| {
-            if (hz * 10.0).round() >= 10_000.0 {
-                format!("{:.1} kHz", hz / 1_000.0)
-            } else {
-                format!("{hz:.1} Hz")
-            }
-        }))
-        .with_string_to_value(formatters::s2v_f32_hz_then_khz());
-        let seconds = |name: &str, default: f32, max: f32| {
-            FloatParam::new(
-                name,
-                default,
-                FloatRange::Skewed {
-                    min: 0.000_05,
-                    max,
-                    factor: FloatRange::skew_factor(-2.0),
-                },
-            )
-            .with_unit(" s")
-            .with_value_to_string(formatters::v2s_f32_rounded(3))
-        };
+        let float = |id: &str| float(id, &source_rate);
+        let [a, b] = LAYERS;
         Self {
-            a_reader: EnumParam::new("A Playback mode", a.reader),
-            a_root: root("A Root", a.root),
-            a_transpose: tune("A Transpose", a.transpose),
-            a_start: percent("A Start", a.start),
-            a_end: percent("A End", a.end),
-            a_loop_start: percent("A Loop start", a.loop_start),
-            a_loop_end: percent("A Loop end", a.loop_end),
-            a_loop_crossfade: crossfade("A Loop crossfade", a.loop_crossfade_s),
-            a_loop: EnumParam::new("A Loop", a.loop_mode),
-            // **A direction reads as a direction everywhere**, not only on the panel. The segments
-            // said Forward/Reverse while the parameter itself said Off/On, so an automation lane
-            // and any host's generic list showed "Off" for a direction, which names nothing.
-            a_reverse: direction("A Direction", a.reverse),
-            a_level: percent("A Level", a.level),
-            a_pan: bipolar("A Pan", a.pan),
-            a_scan_speed: travel("A Scan speed", a.scan_speed),
-            a_grain_size: grain_size("A Grain size", a.grain_size_s),
-            a_grain_rate: grain_rate("A Grain rate", a.grain_rate_hz),
-            a_grain_sync: BoolParam::new("A Grain rate sync", false),
-            a_pitch_var: spread("A Pitch variation", a.pitch_variation_st),
-            a_position_var: percent("A Position variation", a.position_variation),
-            a_timing: percent("A Onset timing", a.onset_timing),
-            a_width: percent("A Stereo width", a.stereo_width),
-            a_reverse_chance: percent("A Reverse chance", a.reverse_chance),
-            a_grain_shape: grain_shape("A Grain shape", a.grain_shape),
-            b_reader: EnumParam::new("B Playback mode", b.reader),
-            b_root: root("B Root", b.root),
-            b_transpose: tune("B Transpose", b.transpose),
-            b_start: percent("B Start", b.start),
-            b_end: percent("B End", b.end),
-            b_loop_start: percent("B Loop start", b.loop_start),
-            b_loop_end: percent("B Loop end", b.loop_end),
-            b_loop_crossfade: crossfade("B Loop crossfade", b.loop_crossfade_s),
-            b_loop: EnumParam::new("B Loop", b.loop_mode),
-            b_reverse: direction("B Direction", b.reverse),
-            b_level: percent("B Level", b.level),
-            b_pan: bipolar("B Pan", b.pan),
-            b_scan_speed: travel("B Scan speed", b.scan_speed),
-            b_grain_size: grain_size("B Grain size", b.grain_size_s),
-            b_grain_rate: grain_rate("B Grain rate", b.grain_rate_hz),
-            b_grain_sync: BoolParam::new("B Grain rate sync", false),
-            b_pitch_var: spread("B Pitch variation", b.pitch_variation_st),
-            b_position_var: percent("B Position variation", b.position_variation),
-            b_timing: percent("B Onset timing", b.onset_timing),
-            b_width: percent("B Stereo width", b.stereo_width),
-            b_reverse_chance: percent("B Reverse chance", b.reverse_chance),
-            b_grain_shape: grain_shape("B Grain shape", b.grain_shape),
-            // **"rate / 5.7" is a ratio, not a value.** A control named Sample rate has to read in
-            // hertz — that is the number the machines were sold on and the only form a player can
-            // act on. The divisor was shown because the formatter cannot see the loaded sample; the
-            // shared `source_rate` is what fixes that, and it is the *sample's* rate, so the
-            // reading is identical at every host rate. See [`DEFAULT_SOURCE_RATE`].
-            rate: {
-                let shown = Arc::clone(&source_rate);
-                let parsed = Arc::clone(&source_rate);
-                converter_stage_shared(
-                    "Sample rate",
-                    init.character.sample_rate,
-                    Box::new(move |v| {
-                        let divisor = mxm_creative_sampler_dsp::character_rate_divisor(v);
-                        let hz = shown.load(Ordering::Relaxed) as f32 / divisor;
-                        // **Each unit is chosen from the rounding the finer one prints**, never
-                        // from the raw hertz: at `hz >= 10_000.0`, 9997 Hz read `10.00 kHz`,
-                        // parsed to ten thousand and came back `10.0 kHz`, and at `hz >= 1_000.0`
-                        // 999.6 Hz read `1000 Hz` and came back `1.00 kHz`.
-                        if (hz / 10.0).round() >= 1_000.0 {
-                            format!("{:.1} kHz", hz / 1000.0)
-                        } else if hz.round() >= 1_000.0 {
-                            format!("{:.2} kHz", hz / 1000.0)
-                        } else {
-                            format!("{hz:.0} Hz")
-                        }
-                    }),
-                    // `divisor = 2^(5v)`, so `v = log2(source / hz) / 5`. **Read against the same
-                    // loaded rate the formatter used**, which is why this one needs the handle: a
-                    // reading of "24.0 kHz" means half speed on a 48 kHz source and full speed on a
-                    // 24 kHz one, and answering with the wrong one would move the sound.
-                    Box::new(move |text: &str| {
-                        let text = text.trim().to_ascii_lowercase();
-                        let (number, scale) = match text.strip_suffix("khz") {
-                            Some(rest) => (rest, 1000.0),
-                            None => (text.trim_end_matches("hz"), 1.0),
-                        };
-                        let hz = number.trim().parse::<f32>().ok()? * scale;
-                        if hz <= 0.0 {
-                            return None;
-                        }
-                        let source = parsed.load(Ordering::Relaxed) as f32;
-                        Some(((source / hz).max(1.0).log2() / 5.0).clamp(0.0, 1.0))
-                    }),
-                )
-            },
-            converter: converter_stage(
-                "Bit depth",
-                init.character.bit_depth,
-                |v| format!("{:.0} bits", mxm_creative_sampler_dsp::character_bits(v)),
-                // `bits = 16 - 11*sqrt(c)`, so `c = ((16 - bits) / 11)^2`.
-                |text| {
-                    let bits = text
-                        .trim()
-                        .trim_end_matches("bits")
-                        .trim_end_matches("bit")
-                        .trim()
-                        .parse::<f32>()
-                        .ok()?;
-                    Some(((16.0 - bits) / 11.0).clamp(0.0, 1.0).powi(2))
-                },
-            ),
-            // **"45% hold" names the mechanism, not the sound.** A converter has to decide what the
-            // output does *between* two stored frames: slide smoothly to the next one, or sit on
-            // the old one and jump. Sitting and jumping is what a cheap output stage did, and the
-            // steps it leaves are extra high content that was never in the recording — the buzz on
-            // top. So the ends are named for what you hear, and the middle says which way it is
-            // leaning rather than quoting a percentage of a word nobody outside this file knows.
-            // **The two words and the percentages partition the travel rather than overlapping
-            // it.** The thresholds used to be 0.001 and 0.999, which left 0.002 reading "0%
-            // stepped" - a value whose own text parses back to something that reads "smooth". One
-            // integer percent decides all three branches now, so every reading has exactly one
-            // value behind it. It is also the shape the dither builder above already uses.
-            reconstruction: converter_stage(
-                "Bit smoothing",
-                init.character.bit_smoothing,
-                |v| match (v.clamp(0.0, 1.0) * 100.0).round() as i32 {
-                    0 => "smooth".to_owned(),
-                    100 => "stepped".to_owned(),
-                    percent => format!("{percent}% stepped"),
-                },
-                |text| match text.trim().to_ascii_lowercase().as_str() {
-                    "smooth" => Some(0.0),
-                    "stepped" => Some(1.0),
-                    other => other
-                        .trim_end_matches("stepped")
-                        .trim()
-                        .trim_end_matches('%')
-                        .trim()
-                        .parse::<f32>()
-                        .ok()
-                        .map(|percent| (percent / 100.0).clamp(0.0, 1.0)),
-                },
-            ),
-            input: converter_stage(
-                "Converter drive",
-                init.character.converter_drive,
-                |v| format!("{:+.1} dB", mxm_creative_sampler_dsp::character_drive_db(v)),
-                // `dB = 20*log10(1 + 15i)`, so `i = (10^(dB/20) - 1) / 15`. The sign the formatter
-                // prints is read back by `f32::from_str`, which accepts a leading `+`.
-                |text| {
-                    let db = text
-                        .trim()
-                        .trim_end_matches("dB")
-                        .trim_end_matches("db")
-                        .trim()
-                        .parse::<f32>()
-                        .ok()?;
-                    Some(((10.0f32.powf(db / 20.0) - 1.0) / 15.0).clamp(0.0, 1.0))
-                },
-            ),
-            converter_type: EnumParam::new("Converter type", init.character.converter_type),
-            jitter: percent("Jitter", init.character.jitter),
-            cutoff,
-            resonance: percent("Resonance", init.filter.resonance),
-            filter_mode: EnumParam::new("Filter mode", init.filter.mode),
-            drive: percent("Drive", init.filter.drive),
-            attack: seconds("Attack", init.envelope.attack_s, 10.0),
-            decay: seconds("Decay", init.envelope.decay_s, 10.0),
-            sustain: percent("Sustain", init.envelope.sustain),
-            release: seconds("Release", init.envelope.release_s, 20.0),
-            lfo_rate: lfo_rate("LFO 1 rate", init.lfos[0].rate_hz),
-            lfo1_sync: BoolParam::new("LFO 1 sync", false),
-            lfo_shape: EnumParam::new("LFO 1 shape", init.lfos[0].shape),
-            // **A different rate and shape from LFO 1**, because two identical LFOs are one LFO
-            // until somebody changes something, and the first thing a player does with a second
-            // modulator is check that it is not the first one.
-            lfo2_rate: lfo_rate("LFO 2 rate", init.lfos[1].rate_hz),
-            lfo2_sync: BoolParam::new("LFO 2 sync", false),
-            lfo2_shape: EnumParam::new("LFO 2 shape", init.lfos[1].shape),
-            master: percent("Master", init.performance.master),
-            voice_mode: EnumParam::new("Voices", init.performance.voices),
-            // Glide is the time to cover an octave, not the time between any two keys: an interval
-            // measured in seconds-per-note makes a wide leap arrive at the same moment as a
-            // semitone, which is not what a player hears as portamento.
-            glide: FloatParam::new(
-                "Glide",
-                init.performance.glide_s_per_octave,
-                FloatRange::Skewed {
-                    min: 0.0,
-                    max: 5.0,
-                    factor: FloatRange::skew_factor(-2.0),
-                },
-            )
-            .with_unit(" s/oct")
-            .with_value_to_string(formatters::v2s_f32_rounded(3)),
-            bend_range: FloatParam::new(
-                "Bend range",
-                init.performance.bend_range_st,
-                FloatRange::Linear {
-                    min: 0.0,
-                    max: 24.0,
-                },
-            )
-            .with_step_size(1.0)
-            // Smoothed because it scales a held bend into every voice's pitch: a range edit under a
-            // held bend would otherwise be a pitch step (mxm-kit's `docs/code-review-notes.md` §2).
-            // The 20 ms matches `mxm-mono-02` and `mxm-mono-08`.
-            .with_smoother(SmoothingStyle::Linear(20.0))
-            .with_unit(" st")
-            .with_value_to_string(formatters::v2s_f32_rounded(0)),
+            a_reader: choice(a.reader),
+            a_root: float(a.root),
+            a_transpose: float(a.transpose),
+            a_start: float(a.start),
+            a_end: float(a.end),
+            a_loop_start: float(a.loop_start),
+            a_loop_end: float(a.loop_end),
+            a_loop_crossfade: float(a.loop_crossfade),
+            a_loop: choice(a.loop_mode),
+            a_reverse: switch(a.reverse),
+            a_level: float(a.level),
+            a_pan: float(a.pan),
+            a_scan_speed: float(a.scan_speed),
+            a_grain_size: float(a.grain_size),
+            a_grain_rate: float(a.grain_rate),
+            a_grain_sync: switch(a.grain_sync),
+            a_pitch_var: float(a.pitch_variation),
+            a_position_var: float(a.position_variation),
+            a_timing: float(a.onset_timing),
+            a_width: float(a.stereo_width),
+            a_reverse_chance: float(a.reverse_chance),
+            a_grain_shape: float(a.grain_shape),
+            b_reader: choice(b.reader),
+            b_root: float(b.root),
+            b_transpose: float(b.transpose),
+            b_start: float(b.start),
+            b_end: float(b.end),
+            b_loop_start: float(b.loop_start),
+            b_loop_end: float(b.loop_end),
+            b_loop_crossfade: float(b.loop_crossfade),
+            b_loop: choice(b.loop_mode),
+            b_reverse: switch(b.reverse),
+            b_level: float(b.level),
+            b_pan: float(b.pan),
+            b_scan_speed: float(b.scan_speed),
+            b_grain_size: float(b.grain_size),
+            b_grain_rate: float(b.grain_rate),
+            b_grain_sync: switch(b.grain_sync),
+            b_pitch_var: float(b.pitch_variation),
+            b_position_var: float(b.position_variation),
+            b_timing: float(b.onset_timing),
+            b_width: float(b.stereo_width),
+            b_reverse_chance: float(b.reverse_chance),
+            b_grain_shape: float(b.grain_shape),
+            rate: float(id::SAMPLE_RATE),
+            converter: float(id::BIT_DEPTH),
+            reconstruction: float(id::BIT_SMOOTHING),
+            input: float(id::CONVERTER_DRIVE),
+            converter_type: choice(id::CONVERTER_TYPE),
+            jitter: float(id::JITTER),
+            cutoff: float(id::CUTOFF),
+            resonance: float(id::RESONANCE),
+            filter_mode: choice(id::FILTER_MODE),
+            drive: float(id::DRIVE),
+            attack: float(id::ATTACK),
+            decay: float(id::DECAY),
+            sustain: float(id::SUSTAIN),
+            release: float(id::RELEASE),
+            lfo_rate: float(id::LFO1_RATE),
+            lfo1_sync: switch(id::LFO1_SYNC),
+            lfo_shape: choice(id::LFO1_SHAPE),
+            lfo2_rate: float(id::LFO2_RATE),
+            lfo2_sync: switch(id::LFO2_SYNC),
+            lfo2_shape: choice(id::LFO2_SHAPE),
+            master: float(id::MASTER),
+            voice_mode: choice(id::VOICE_MODE),
+            glide: float(id::GLIDE),
+            bend_range: float(id::BEND_RANGE),
             routes: crate::routes::Routes::default(),
             assets: AssetField::new(),
             preset: RwLock::new(PresetIdentity::none()),
@@ -1023,12 +554,13 @@ impl MxmCreativeSamplerParams {
         }
     }
 
-    pub fn layer(&self, index: usize) -> LayerParams {
+    /// One layer's values for this sample, each smoother advanced once.
+    pub fn layer(&self, index: usize) -> sound::Layer {
         if index == 0 {
-            LayerParams {
+            sound::Layer {
                 reader: self.a_reader.value().dsp(),
-                root_note: self.a_root.smoothed.next(),
-                tune_semitones: self.a_transpose.smoothed.next(),
+                root: self.a_root.smoothed.next(),
+                transpose: self.a_transpose.smoothed.next(),
                 start: self.a_start.smoothed.next(),
                 end: self.a_end.smoothed.next(),
                 loop_start: self.a_loop_start.smoothed.next(),
@@ -1038,21 +570,21 @@ impl MxmCreativeSamplerParams {
                 reverse: self.a_reverse.value(),
                 level: self.a_level.smoothed.next(),
                 pan: self.a_pan.smoothed.next(),
-                stretch_travel: self.a_scan_speed.smoothed.next(),
+                scan_speed: self.a_scan_speed.smoothed.next(),
                 grain_size_s: self.a_grain_size.smoothed.next(),
-                grain_density_hz: self.a_grain_rate.smoothed.next(),
-                grain_position_variation: self.a_position_var.smoothed.next(),
-                grain_onset_timing: self.a_timing.smoothed.next(),
-                grain_stereo_width: self.a_width.smoothed.next(),
-                grain_reverse_chance: self.a_reverse_chance.smoothed.next(),
+                grain_rate_hz: self.a_grain_rate.smoothed.next(),
+                pitch_variation_st: self.a_pitch_var.smoothed.next(),
+                position_variation: self.a_position_var.smoothed.next(),
+                onset_timing: self.a_timing.smoothed.next(),
+                stereo_width: self.a_width.smoothed.next(),
+                reverse_chance: self.a_reverse_chance.smoothed.next(),
                 grain_shape: self.a_grain_shape.smoothed.next(),
-                grain_spread_semitones: self.a_pitch_var.smoothed.next(),
             }
         } else {
-            LayerParams {
+            sound::Layer {
                 reader: self.b_reader.value().dsp(),
-                root_note: self.b_root.smoothed.next(),
-                tune_semitones: self.b_transpose.smoothed.next(),
+                root: self.b_root.smoothed.next(),
+                transpose: self.b_transpose.smoothed.next(),
                 start: self.b_start.smoothed.next(),
                 end: self.b_end.smoothed.next(),
                 loop_start: self.b_loop_start.smoothed.next(),
@@ -1062,16 +594,61 @@ impl MxmCreativeSamplerParams {
                 reverse: self.b_reverse.value(),
                 level: self.b_level.smoothed.next(),
                 pan: self.b_pan.smoothed.next(),
-                stretch_travel: self.b_scan_speed.smoothed.next(),
+                scan_speed: self.b_scan_speed.smoothed.next(),
                 grain_size_s: self.b_grain_size.smoothed.next(),
-                grain_density_hz: self.b_grain_rate.smoothed.next(),
-                grain_position_variation: self.b_position_var.smoothed.next(),
-                grain_onset_timing: self.b_timing.smoothed.next(),
-                grain_stereo_width: self.b_width.smoothed.next(),
-                grain_reverse_chance: self.b_reverse_chance.smoothed.next(),
+                grain_rate_hz: self.b_grain_rate.smoothed.next(),
+                pitch_variation_st: self.b_pitch_var.smoothed.next(),
+                position_variation: self.b_position_var.smoothed.next(),
+                onset_timing: self.b_timing.smoothed.next(),
+                stereo_width: self.b_width.smoothed.next(),
+                reverse_chance: self.b_reverse_chance.smoothed.next(),
                 grain_shape: self.b_grain_shape.smoothed.next(),
-                grain_spread_semitones: self.b_pitch_var.smoothed.next(),
             }
+        }
+    }
+
+    /// Every value the DSP reads but the routes, for this sample: each smoothed parameter advanced
+    /// once, the rest as they stand. **Bend range is read, not advanced**: the plugin follows it
+    /// sample by sample itself (`MxmCreativeSampler::follow_bend_range`).
+    pub fn sound(&self) -> sound::Sound {
+        sound::Sound {
+            layers: [self.layer(0), self.layer(1)],
+            character: sound::Character {
+                sample_rate: self.rate.smoothed.next(),
+                bit_depth: self.converter.smoothed.next(),
+                bit_smoothing: self.reconstruction.smoothed.next(),
+                converter_drive: self.input.smoothed.next(),
+                converter_type: self.converter_type.value().dsp(),
+                jitter: self.jitter.smoothed.next(),
+            },
+            filter: sound::Filter {
+                cutoff_hz: self.cutoff.smoothed.next(),
+                resonance: self.resonance.smoothed.next(),
+                mode: self.filter_mode.value().dsp(),
+                drive: self.drive.smoothed.next(),
+            },
+            envelope: sound::Envelope {
+                attack_s: self.attack.smoothed.next(),
+                decay_s: self.decay.smoothed.next(),
+                sustain: self.sustain.smoothed.next(),
+                release_s: self.release.smoothed.next(),
+            },
+            lfos: [
+                sound::Lfo {
+                    rate_hz: self.lfo_rate.smoothed.next(),
+                    shape: self.lfo_shape.value().dsp(),
+                },
+                sound::Lfo {
+                    rate_hz: self.lfo2_rate.smoothed.next(),
+                    shape: self.lfo2_shape.value().dsp(),
+                },
+            ],
+            performance: sound::Performance {
+                master: self.master.smoothed.next(),
+                voices: self.voice_mode.value().dsp(),
+                glide_s_per_octave: self.glide.value(),
+                bend_range_st: self.bend_range.value(),
+            },
         }
     }
 }
@@ -1080,61 +657,41 @@ impl MxmCreativeSamplerParams {
     /// LFO 1's rate while its sync follows the host, or `None` for its free value: the modulated
     /// position picks a division on [`LFO_SYNC`]. Resolved once a buffer by the plugin.
     pub fn synced_lfo1_rate(&self, tempo: Option<f64>) -> Option<f32> {
-        let param = &self.lfo_rate;
-        LFO_SYNC
-            .resolve(
-                self.lfo1_sync.value(),
-                tempo,
-                param.modulated_normalized_value(),
-                f64::from(param.preview_plain(0.0)),
-                f64::from(param.preview_plain(1.0)),
-            )
-            .map(|hz| hz as f32)
+        TEMPO_SYNCS[0].resolve(
+            self.lfo1_sync.value(),
+            tempo,
+            self.lfo_rate.modulated_normalized_value(),
+        )
     }
 
     /// LFO 2's rate while its sync follows the host, or `None` for its free value: the modulated
     /// position picks a division on [`LFO_SYNC`]. Resolved once a buffer by the plugin.
     pub fn synced_lfo2_rate(&self, tempo: Option<f64>) -> Option<f32> {
-        let param = &self.lfo2_rate;
-        LFO_SYNC
-            .resolve(
-                self.lfo2_sync.value(),
-                tempo,
-                param.modulated_normalized_value(),
-                f64::from(param.preview_plain(0.0)),
-                f64::from(param.preview_plain(1.0)),
-            )
-            .map(|hz| hz as f32)
+        TEMPO_SYNCS[1].resolve(
+            self.lfo2_sync.value(),
+            tempo,
+            self.lfo2_rate.modulated_normalized_value(),
+        )
     }
 
     /// A's grain rate while its sync follows the host, or `None` for its free value: the modulated
     /// position picks a division on [`GRAIN_SYNC`]. Resolved once a buffer by the plugin.
     pub fn synced_a_grain_rate(&self, tempo: Option<f64>) -> Option<f32> {
-        let param = &self.a_grain_rate;
-        GRAIN_SYNC
-            .resolve(
-                self.a_grain_sync.value(),
-                tempo,
-                param.modulated_normalized_value(),
-                f64::from(param.preview_plain(0.0)),
-                f64::from(param.preview_plain(1.0)),
-            )
-            .map(|hz| hz as f32)
+        TEMPO_SYNCS[2].resolve(
+            self.a_grain_sync.value(),
+            tempo,
+            self.a_grain_rate.modulated_normalized_value(),
+        )
     }
 
     /// B's grain rate while its sync follows the host, or `None` for its free value: the modulated
     /// position picks a division on [`GRAIN_SYNC`]. Resolved once a buffer by the plugin.
     pub fn synced_b_grain_rate(&self, tempo: Option<f64>) -> Option<f32> {
-        let param = &self.b_grain_rate;
-        GRAIN_SYNC
-            .resolve(
-                self.b_grain_sync.value(),
-                tempo,
-                param.modulated_normalized_value(),
-                f64::from(param.preview_plain(0.0)),
-                f64::from(param.preview_plain(1.0)),
-            )
-            .map(|hz| hz as f32)
+        TEMPO_SYNCS[3].resolve(
+            self.b_grain_sync.value(),
+            tempo,
+            self.b_grain_rate.modulated_normalized_value(),
+        )
     }
 }
 
@@ -1255,22 +812,22 @@ mod tests {
         );
         close(
             params.a_grain_size.default_plain_value(),
-            init.layers[0].grain_size_s,
+            init.sound.layers[0].grain_size_s,
             "grain size",
         );
         close(
             params.a_grain_rate.default_plain_value(),
-            init.layers[0].grain_rate_hz,
+            init.sound.layers[0].grain_rate_hz,
             "grain rate",
         );
         close(
             params.a_pitch_var.default_plain_value(),
-            init.layers[0].pitch_variation_st,
+            init.sound.layers[0].pitch_variation_st,
             "pitch variation",
         );
         close(
             params.a_position_var.default_plain_value(),
-            init.layers[0].position_variation,
+            init.sound.layers[0].position_variation,
             "position variation",
         );
         close(
@@ -1301,13 +858,13 @@ mod tests {
         close(params.jitter.default_plain_value(), 0.0, "jitter");
         close(
             params.cutoff.default_plain_value(),
-            init.filter.cutoff_hz,
+            init.sound.filter.cutoff_hz,
             "cutoff",
         );
         close(params.resonance.default_plain_value(), 0.38, "resonance");
         close(
             params.lfo2_rate.default_plain_value(),
-            init.lfos[1].rate_hz,
+            init.sound.lfos[1].rate_hz,
             "LFO 2 rate",
         );
 
@@ -1412,5 +969,124 @@ mod tests {
                 "{typed:?} parsed to {got}, not {wanted}"
             );
         }
+    }
+
+    /// **Every parameter is the state crate's**, so the plugin and anything reading its state cannot
+    /// disagree: the ids its `#[id]` attributes declare, in the order a host lists them, each
+    /// group, name, unit, step count and default, and at every point of the travel the plain value a
+    /// host's normalised one stores, the text a host shows and what that text parses back to — at
+    /// three source rates, because Sample rate's reading depends on the loaded sample's. The route
+    /// amounts are built by mxm-kit's own `amount_param_at`, so this is also what holds the state
+    /// crate's copy of the collection's route reading to the kit's.
+    #[test]
+    fn every_parameter_is_the_tables() {
+        let params = MxmCreativeSamplerParams::default();
+        let map = params.param_map();
+        let table = table::all();
+        assert_eq!(
+            map.iter().map(|(id, _, _)| id.as_str()).collect::<Vec<_>>(),
+            table.iter().map(|param| param.id).collect::<Vec<_>>(),
+            "the declared ids are not the table's, in the table's order"
+        );
+        let typed = [
+            "",
+            "0",
+            "1",
+            "-1",
+            "0.5",
+            "50 %",
+            "-25%",
+            "+12 st",
+            "C4",
+            "c#3 +25 ct",
+            "59.75",
+            "1 kHz",
+            "1000 Hz",
+            "500 ms",
+            "1.5 s",
+            "On",
+            "off",
+            "yes",
+            "Reverse",
+            "Hard",
+            "25% stepped",
+            "8 bits",
+            "+6.0 dB",
+            "0.5x",
+            "+4.00 oct",
+            "-20 %/oct",
+            "Grain",
+            "Low pass",
+            "Sample & hold",
+            "garbage",
+            "A4, +10 cents",
+        ];
+        for rate in [DEFAULT_SOURCE_RATE, 44_100, 22_050] {
+            params.source_rate.store(rate, Ordering::Relaxed);
+            for ((id, ptr, group), spec) in map.iter().zip(table) {
+                unsafe {
+                    assert_eq!(group.as_str(), spec.group, "{id}'s group");
+                    assert_eq!(ptr.name(), spec.name, "{id}'s name");
+                    let unit = spec.float().map_or("", |float| float.unit);
+                    assert_eq!(ptr.unit(), unit, "{id}'s unit");
+                    assert_eq!(ptr.step_count(), spec.step_count(), "{id}'s steps");
+                    assert_eq!(
+                        ptr.default_normalized_value().to_bits(),
+                        spec.default_normalized().to_bits(),
+                        "{id}'s default"
+                    );
+                    let mut grid: Vec<f32> = (0..=400).map(|i| i as f32 / 400.0).collect();
+                    grid.extend([1.0e-6, 0.4999, 0.5001, 0.999_999]);
+                    for normalized in grid {
+                        if spec.float().is_some() {
+                            assert_eq!(
+                                ptr.preview_plain(normalized).to_bits(),
+                                spec.plain(normalized).to_bits(),
+                                "{id} at {normalized}"
+                            );
+                        }
+                        let text = ptr.normalized_value_to_string(normalized, true);
+                        assert_eq!(text, spec.text(normalized, rate), "{id} at {normalized}");
+                        assert_eq!(
+                            ptr.string_to_normalized_value(&text).map(f32::to_bits),
+                            spec.parse(&text, rate).map(f32::to_bits),
+                            "{id} reading {text:?}"
+                        );
+                    }
+                    for text in typed {
+                        assert_eq!(
+                            ptr.string_to_normalized_value(text).map(f32::to_bits),
+                            spec.parse(text, rate).map(f32::to_bits),
+                            "{id} reading {text:?}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// **Every choice enum is the table's**: its variants' ids and names in the table's order, and
+    /// each the DSP value the table maps that index to.
+    #[test]
+    fn every_choice_is_the_tables() {
+        use mxm_creative_sampler_state::sound::{self, Choices};
+        fn check<T: Enum + Copy, D: Copy + PartialEq + std::fmt::Debug>(
+            choices: Choices<D>,
+            dsp: impl Fn(T) -> D,
+        ) {
+            let ids = T::ids().expect("every choice declares its ids");
+            assert_eq!(T::variants().len(), choices.variants.len());
+            for (index, variant) in choices.variants.iter().enumerate() {
+                assert_eq!(ids[index], variant.id);
+                assert_eq!(T::variants()[index], variant.name);
+                assert_eq!(dsp(T::from_index(index)), choices.values[index]);
+            }
+        }
+        check(sound::READERS, ReaderChoice::dsp);
+        check(sound::LOOP_MODES, LoopChoice::dsp);
+        check(sound::VOICE_MODES, VoiceChoice::dsp);
+        check(sound::LFO_SHAPES, ShapeChoice::dsp);
+        check(sound::CONVERTER_TYPES, ConverterChoice::dsp);
+        check(sound::FILTER_MODES, FilterChoice::dsp);
     }
 }

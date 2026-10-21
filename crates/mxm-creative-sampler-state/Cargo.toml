@@ -1,0 +1,37 @@
+[package]
+name = "mxm-creative-sampler-state"
+description = "What an mxm-creative-sampler state means, with no plugin framework: its parameters, Init, its JSON, sample import and the DSP's parameters"
+version.workspace = true
+edition.workspace = true
+# The DSP crate's floor, which this depends on; `as_chunks` (1.88) reads the embedded audio too.
+rust-version = "1.88"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Every dependency builds for `wasm32-unknown-unknown`: the web tracker plays this sampler there
+# (`plans/plan-web-tracker.md` in newDAWn). No nice-plug, no egui; `cargo tree` is the check.
+mxm-creative-sampler-dsp.workspace = true
+# `Offer`, which decides a route's travel. Dependency-free; the DSP already takes it.
+mxm-modulation.workspace = true
+# The tempo syncs' ladder. Dependency-free.
+mxm-tempo.workspace = true
+# Imports every format the collection reads. Carries MPL-2.0 symphonia, accepted by the owner
+# (2026-09-15), used unmodified.
+mxm-audio-file-decode.workspace = true
+base64 = "=0.22.1"
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.145"
+
+[features]
+# `payload::refusal`: refuses a chosen reservation, so a test can prove a refused buffer changes
+# nothing. Enable it only from `[dev-dependencies]` (the plugin's refusal tests do), so no shipped
+# graph carries it.
+refusal = []
+
+[dev-dependencies]
+# The import and loop-chunk tests write the WAVs they read through the collection's encoder.
+mxm-audio-file.workspace = true
+# The loop-chunk tests' seeded streams.
+mxm-rng.workspace = true

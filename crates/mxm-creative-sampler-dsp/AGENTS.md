@@ -44,7 +44,7 @@ here. The plugin prepares decoded files and owns publication/reclamation.
 
 - `src/routing.rs` declares sources, targets and each pair's reach (`FULL_SCALE`), and owns no patch:
   `Engine::new` starts with `Routing::new()`, and the plugin supplies its compiled Init
-  (`plugins/mxm-creative-sampler/src/init.rs`) before rendering.
+  (`crates/mxm-creative-sampler-state/src/init.rs`) before rendering.
 - **Source order is load-bearing** (earlier reads this sample, later last sample's); the layers'
   audio is declared last, so every route from it is backward. LFOs are evaluated once per sample and
   published into every active voice frame; no third frame scope exists.
@@ -100,7 +100,11 @@ here. The plugin prepares decoded files and owns publication/reclamation.
 ## Sample analysis ([§ onset map](NOTES.md#the-onset-map-is-part-of-constructing-a-sample), [§ root](NOTES.md#naming-the-note-a-sample-is-playing))
 
 - Onset map and period track are built in `Sample::new`, before publication, with no fallback, and
-  never serialised. The analysis mono mix is chosen once at load.
+  never serialised. The analysis mono mix is chosen once at load. `Sample::analyse` makes the same
+  analysis apart, and `Sample::from_analysis` puts a sample together from it with nothing checked
+  or allocated, for a caller that can't allocate where it publishes (the web tracker's
+  AudioWorklet); `into_parts` hands the buffers back. Analysis of other frames is the caller's
+  error, so only `analyse`'s own output goes in.
 - Every buffer sized from the source is reserved fallibly (`SampleError::Allocation`,
   `tests/allocation_refusal.rs`). Markers are walked with a per-layer cursor, not searched.
 - Analyses **decline rather than guess**. `detect_root` is YIN from the region start, after leading

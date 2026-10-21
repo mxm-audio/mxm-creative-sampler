@@ -132,6 +132,15 @@ pub struct Sample {
     periods: Vec<f32>,
 }
 
+/// A sample's load-time analysis, made by [`Sample::analyse`] apart from the sample: its onsets,
+/// its channels' mix and its period track (the fields of [`Sample`] of those names).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Analysis {
+    pub transients: Vec<u32>,
+    pub mono_mix: [f32; 2],
+    pub periods: Vec<f32>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SampleError {
     Empty,
@@ -155,6 +164,15 @@ impl Sample {
     /// machine and scales with length. The plugin calls this off the audio thread, behind the
     /// stage/commit barrier that keeps new audio from being heard through the old patch.
     pub fn new(frames: Vec<[f32; 2]>, sample_rate: f32) -> Result<Self, SampleError> {
+        let analysis = Self::analyse(&frames, sample_rate)?;
+        Ok(Self::from_analysis(frames, sample_rate, analysis))
+    }
+
+    /// **The load-time analysis alone**, checked as [`Sample::new`] checks its source, for a caller
+    /// that builds the sample somewhere it can't allocate: the web tracker analyses off its audio
+    /// thread, and its AudioWorklet puts the sample together with [`Sample::from_analysis`] from
+    /// buffers it reserved at its start. Allocates and walks the source as `new` does.
+    pub fn analyse(frames: &[[f32; 2]], sample_rate: f32) -> Result<Analysis, SampleError> {
         if frames.is_empty() {
             return Err(SampleError::Empty);
         }
@@ -164,16 +182,42 @@ impl Sample {
         if frames.iter().flatten().any(|value| !value.is_finite()) {
             return Err(SampleError::NonFinite);
         }
-        let mono_mix = choose_mono_mix(&frames);
-        let transients = detect_transients(&frames, mono_mix, sample_rate)?;
-        let periods = track_periods(&frames, mono_mix, sample_rate)?;
-        Ok(Self {
-            frames,
-            sample_rate,
+        let mono_mix = choose_mono_mix(frames);
+        let transients = detect_transients(frames, mono_mix, sample_rate)?;
+        let periods = track_periods(frames, mono_mix, sample_rate)?;
+        Ok(Analysis {
             transients,
             mono_mix,
             periods,
         })
+    }
+
+    /// A sample from its frames and **the analysis [`Sample::analyse`] made of exactly those
+    /// frames at that rate**: nothing is checked, analysed or allocated, so an audio thread can
+    /// call it. Analysis of other frames makes a sample its readers misread.
+    #[must_use]
+    pub fn from_analysis(frames: Vec<[f32; 2]>, sample_rate: f32, analysis: Analysis) -> Self {
+        Self {
+            frames,
+            sample_rate,
+            transients: analysis.transients,
+            mono_mix: analysis.mono_mix,
+            periods: analysis.periods,
+        }
+    }
+
+    /// The sample taken apart, its buffers handed back whole, so a caller that reserved them can
+    /// use them again without allocating.
+    #[must_use]
+    pub fn into_parts(self) -> (Vec<[f32; 2]>, Analysis) {
+        (
+            self.frames,
+            Analysis {
+                transients: self.transients,
+                mono_mix: self.mono_mix,
+                periods: self.periods,
+            },
+        )
     }
 
     pub fn frames(&self) -> &[[f32; 2]] {
@@ -6473,6 +6517,25 @@ mod tests {
             .unwrap()
             .born;
         assert_eq!(released_born, 2);
+    }
+
+    /// Analysed apart and put together, a sample is the one `Sample::new` makes, and its parts come
+    /// back whole for another.
+    #[test]
+    fn a_sample_from_its_analysis_is_the_one_new_makes() {
+        let frames: Vec<[f32; 2]> = (0..9_600)
+            .map(|i| {
+                let x = (i as f32 * 0.05).sin() * if i % 2_400 < 200 { 1.0 } else { 0.3 };
+                [x, -0.5 * x]
+            })
+            .collect();
+        let made = Sample::new(frames.clone(), 48_000.0).unwrap();
+        let analysis = Sample::analyse(&frames, 48_000.0).unwrap();
+        let built = Sample::from_analysis(frames, 48_000.0, analysis);
+        assert_eq!(built, made);
+        let (frames, analysis) = built.into_parts();
+        assert_eq!(Sample::from_analysis(frames, 48_000.0, analysis), made);
+        assert_eq!(Sample::analyse(&[], 48_000.0), Err(SampleError::Empty));
     }
 
     #[test]

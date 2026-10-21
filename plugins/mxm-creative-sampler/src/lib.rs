@@ -1,29 +1,27 @@
 //! `mxm-creative-sampler` — drop a small sound, play it, then find the instrument inside it.
 
-macro_rules! plugin_name {
-    () => {
-        "mxm-creative-sampler"
-    };
-}
-pub const NAME: &str = plugin_name!();
-pub const CLAP_ID: &str = concat!("dk.mxm.", plugin_name!());
+/// The product's name and CLAP id: **the state crate's**, which holds the one literal, so a project
+/// names the device the plugin and the web tracker both answer to.
+pub const NAME: &str = mxm_creative_sampler_state::NAME;
+pub const CLAP_ID: &str = mxm_creative_sampler_state::CLAP_ID;
 
 pub mod asset;
 mod binding;
 pub mod editor;
-pub mod generate;
-mod init;
-pub mod naming;
 pub mod params;
 pub mod preset;
 pub mod routes;
 mod sections;
 pub mod telemetry;
 mod visuals;
-pub mod wav_loop;
+
+// Moved into the state crate, which the web tracker shares; kept at their old paths.
+#[cfg(test)]
+use mxm_creative_sampler_state::init;
+pub use mxm_creative_sampler_state::{generate, naming, wav_loop};
 
 use asset::AssetBank;
-use mxm_creative_sampler_dsp::{Activity, Character, Engine, Note, Params as DspParams};
+use mxm_creative_sampler_dsp::{Activity, Engine, Note, Params as DspParams};
 use nice_plug::midi::{Channel, Key, VoiceID};
 use nice_plug::prelude::*;
 use params::MxmCreativeSamplerParams;
@@ -129,49 +127,24 @@ impl Default for MxmCreativeSampler {
 }
 
 impl MxmCreativeSampler {
+    /// What the DSP plays this sample: every smoother advanced once, mapped by the state crate's
+    /// `Sound::dsp`, which a state's mapping is too, so the two cannot drift apart.
     fn next_params(&self) -> DspParams {
-        // Synced, a grain rate runs at its division; its free smoother advances either way.
-        let mut a = self.params.layer(0);
-        let mut b = self.params.layer(1);
+        let mut params = self.params.sound().dsp();
+        // Synced, a rate runs at its division; its free smoother advanced either way.
+        if let Some(hz) = self.synced[0] {
+            params.lfo_rate_hz = hz;
+        }
+        if let Some(hz) = self.synced[1] {
+            params.lfo2_rate_hz = hz;
+        }
         if let Some(hz) = self.synced[2] {
-            a.grain_density_hz = hz;
+            params.layers[0].grain_density_hz = hz;
         }
         if let Some(hz) = self.synced[3] {
-            b.grain_density_hz = hz;
+            params.layers[1].grain_density_hz = hz;
         }
-        DspParams {
-            layers: [a, b],
-            character: Character {
-                rate: self.params.rate.smoothed.next(),
-                converter: self.params.converter.smoothed.next(),
-                reconstruction: self.params.reconstruction.smoothed.next(),
-                input: self.params.input.smoothed.next(),
-                converter_type: self.params.converter_type.value().dsp(),
-                jitter: self.params.jitter.smoothed.next(),
-            },
-            attack_s: self.params.attack.smoothed.next(),
-            decay_s: self.params.decay.smoothed.next(),
-            sustain: self.params.sustain.smoothed.next(),
-            release_s: self.params.release.smoothed.next(),
-            filter_mode: self.params.filter_mode.value().dsp(),
-            cutoff_hz: self.params.cutoff.smoothed.next().clamp(20.0, 22_000.0),
-            resonance: self.params.resonance.smoothed.next().clamp(0.0, 0.98),
-            filter_drive: self.params.drive.smoothed.next(),
-            lfo_rate_hz: {
-                let free = self.params.lfo_rate.smoothed.next();
-                self.synced[0].unwrap_or(free)
-            },
-            lfo_shape: self.params.lfo_shape.value().dsp(),
-            lfo2_rate_hz: {
-                let free = self.params.lfo2_rate.smoothed.next();
-                self.synced[1].unwrap_or(free)
-            },
-            lfo2_shape: self.params.lfo2_shape.value().dsp(),
-
-            master: self.params.master.smoothed.next(),
-            voice_mode: self.params.voice_mode.value().dsp(),
-            glide_s: self.params.glide.value(),
-        }
+        params
     }
 
     /// Sets a channel's wheel, for the timed-routing test.
@@ -1382,6 +1355,251 @@ mod activation_forgets_the_tempo {
         fn execute(&self, _task: <MxmCreativeSampler as Plugin>::BackgroundTask) {}
         fn set_latency_samples(&self, _samples: u32) {}
         fn set_current_voice_capacity(&self, _capacity: u32) {}
+    }
+}
+
+/// The JSON nice-plug saves this plugin's state as: what a host stores, and what newDAWn keeps in a
+/// project's `plugins/states/`. **nice-plug's own `wrapper::state::serialize_object`, written out**,
+/// because the wrapper keeps it private: every parameter's unmodulated plain value by id, a choice
+/// by its variant's id, then the persisted fields.
+#[cfg(test)]
+pub(crate) fn state_json(params: &MxmCreativeSamplerParams) -> Vec<u8> {
+    use nice_plug::params::internals::ParamPtr;
+    use nice_plug::plugin::ParamValue;
+    let values = params
+        .param_map()
+        .into_iter()
+        .map(|(id, ptr, _)| {
+            let value = unsafe {
+                match ptr {
+                    ParamPtr::FloatParam(p) => ParamValue::F32((*p).unmodulated_plain_value()),
+                    ParamPtr::IntParam(p) => ParamValue::I32((*p).unmodulated_plain_value()),
+                    ParamPtr::BoolParam(p) => ParamValue::Bool((*p).unmodulated_plain_value()),
+                    ParamPtr::EnumParam(p) => match (*p).unmodulated_plain_id() {
+                        Some(id) => ParamValue::String(id.to_owned()),
+                        None => ParamValue::I32((*p).unmodulated_plain_value()),
+                    },
+                }
+            };
+            (id, value)
+        })
+        .collect();
+    let state = PluginState {
+        version: MxmCreativeSampler::VERSION.to_owned(),
+        params: values,
+        fields: params.serialize_fields(),
+    };
+    serde_json::to_vec(&state).expect("a state serialises")
+}
+
+/// Where the first difference between two JSON texts is, for a failure worth reading.
+#[cfg(test)]
+pub(crate) fn first_difference(plugin: &[u8], other: &[u8]) -> String {
+    let at = plugin
+        .iter()
+        .zip(other)
+        .position(|(a, b)| a != b)
+        .unwrap_or(plugin.len().min(other.len()));
+    let around = |text: &[u8]| {
+        let from = at.saturating_sub(80).min(text.len());
+        String::from_utf8_lossy(&text[from..(at + 80).min(text.len())]).into_owned()
+    };
+    format!(
+        "at byte {at}:\n  plugin {}\n  crate  {}",
+        around(plugin),
+        around(other)
+    )
+}
+
+/// **The state crate is the plugin's state** (`plans/plan-web-tracker.md`, W4): what the plugin
+/// writes reads there into the very `Params` and routing the plugin plays, and writes back equal.
+#[cfg(test)]
+mod state_crate {
+    use super::*;
+    use mxm_creative_sampler_dsp::routing::Routing;
+    use mxm_creative_sampler_state::State;
+    use nice_plug::params::InternalParamMut;
+
+    /// The CLAP stream around a state's JSON, as nice-plug's `ext_state_save` writes it.
+    fn clap(json: &[u8]) -> Vec<u8> {
+        let mut stream = (json.len() as u64).to_le_bytes().to_vec();
+        stream.extend_from_slice(json);
+        stream
+    }
+
+    /// **A fresh instance's state is the crate's fresh state**, byte for byte: Init, the generated
+    /// saw, no preset — and the plugin's version is the crate's.
+    #[test]
+    fn a_fresh_instance_writes_the_crates_fresh_state() {
+        assert_eq!(
+            MxmCreativeSampler::VERSION,
+            mxm_creative_sampler_state::PLUGIN_VERSION
+        );
+        let params = MxmCreativeSamplerParams::default();
+        let plugin = state_json(&params);
+        let fresh = State::new().to_json();
+        assert!(plugin == fresh, "{}", first_difference(&plugin, &fresh));
+    }
+
+    /// **A state the plugin writes reads into the `Params` the plugin plays, and writes back
+    /// equal** — through its JSON and its CLAP stream alike.
+    ///
+    /// Every parameter is moved the way a host moves one, to a spread of positions, the tempo syncs
+    /// among them; layer A holds an imported 44.1 kHz file and layer B a generated source; a preset
+    /// identity is loaded. Settled, the plugin's own `next_params` at a tempo, and its routing after
+    /// a sample, are what the crate maps the written state to, and every row a host lists reads as
+    /// the crate's row does.
+    #[test]
+    fn a_state_the_plugin_writes_reads_into_what_it_plays_and_writes_back_equal() {
+        let mut plugin = MxmCreativeSampler::default();
+        let params = plugin.params_for_test();
+
+        let dir =
+            std::env::temp_dir().join(format!("mxm-creative-sampler-w4-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("tone_A.wav");
+        let tone: Vec<f32> = (0..3_000)
+            .map(|n| (n as f32 * 0.0627).sin() * 0.4)
+            .collect();
+        mxm_audio_file::write(
+            &path,
+            &tone,
+            1,
+            44_100,
+            mxm_audio_file::Target::Wav(mxm_audio_file::Bits::Sixteen),
+        )
+        .unwrap();
+        params.assets.import_wav(0, &path).unwrap();
+        params
+            .assets
+            .generate_source(1, crate::generate::Recipe::Glass)
+            .unwrap();
+        params.assets.commit();
+        let _ = std::fs::remove_dir_all(&dir);
+        // As `process` publishes it: the first loaded layer's rate.
+        params.publish_source_rate(44_100.0);
+        // Every parameter somewhere else, as a host sets one, and settled.
+        for (index, (_, ptr, _)) in params.param_map().into_iter().enumerate() {
+            let normalized = (index as f32 * 0.618_034).fract();
+            unsafe {
+                ptr._internal_set_normalized_value(normalized);
+                ptr._internal_update_smoother(48_000.0, true);
+            }
+        }
+        unsafe {
+            params.lfo1_sync._internal_set_plain_value(true);
+            params.b_grain_sync._internal_set_plain_value(true);
+        }
+        // A bank preset loaded, its baseline every parameter as it stands, as `mxm_preset` keeps one.
+        *params.preset.write().unwrap() = mxm_preset::PresetIdentity {
+            version: 1,
+            loaded: Some(mxm_preset::LoadedPreset {
+                name: "Held pad".to_owned(),
+                origin: mxm_preset::Origin::Bank("Pads".to_owned()),
+            }),
+            baseline: params
+                .param_map()
+                .into_iter()
+                .map(|(id, ptr, _)| (id, unsafe { ptr.unmodulated_normalized_value() }))
+                .collect(),
+            state_fingerprint: Some(params.assets.fingerprint()),
+        };
+        let tempo = Some(132.0);
+        plugin.synced = [
+            params.synced_lfo1_rate(tempo),
+            params.synced_lfo2_rate(tempo),
+            params.synced_a_grain_rate(tempo),
+            params.synced_b_grain_rate(tempo),
+        ];
+        assert!(plugin.synced[0].is_some() && plugin.synced[3].is_some());
+        let played = plugin.next_params();
+        let mut routed = params.routes.routing_from(&Routing::new());
+        params.routes.advance(&mut routed);
+
+        let json = state_json(&params);
+        let state = State::from_json(&json).expect("the plugin's state reads");
+        let written = state.to_json();
+        assert!(written == json, "{}", first_difference(&json, &written));
+        let stream = clap(&json);
+        assert_eq!(
+            State::from_clap(&stream)
+                .expect("the plugin's stream reads")
+                .to_clap(),
+            stream
+        );
+
+        assert_eq!(
+            format!("{:?}", state.dsp_params(tempo)),
+            format!("{played:?}"),
+            "the state maps to other parameters than the plugin plays"
+        );
+        let routing = state.routing();
+        assert_eq!(routing.present, routed.present);
+        assert_eq!(
+            routing.amounts.map(|row| row.map(f32::to_bits)),
+            routed.amounts.map(|row| row.map(f32::to_bits))
+        );
+        assert_eq!(routing.live(), routed.live());
+
+        assert_eq!(state.source_rate(), 44_100);
+        for (id, ptr, _) in params.param_map() {
+            let shown =
+                unsafe { ptr.normalized_value_to_string(ptr.unmodulated_normalized_value(), true) };
+            assert_eq!(state.text(&id).as_deref(), Some(shown.as_str()), "{id}");
+        }
+
+        // **A state from before the tempo syncs reads as the plugin's `filter_state` takes it**:
+        // each sync off, and the loaded preset's baseline given each at zero.
+        let mut older: serde_json::Value = serde_json::from_slice(&json).unwrap();
+        let mut identity: serde_json::Value =
+            serde_json::from_str(older["fields"]["preset"].as_str().unwrap()).unwrap();
+        for sync in crate::preset::TEMPO_SYNC_IDS {
+            older["params"].as_object_mut().unwrap().remove(*sync);
+            identity["baseline"].as_object_mut().unwrap().remove(*sync);
+        }
+        older["fields"]["preset"] = serde_json::to_string(&identity).unwrap().into();
+        let older = serde_json::to_vec(&older).unwrap();
+        let mut filtered: PluginState = serde_json::from_slice(&older).unwrap();
+        MxmCreativeSampler::filter_state(&mut filtered);
+        let filtered = serde_json::to_vec(&filtered).unwrap();
+        let read = State::from_json(&older)
+            .expect("an older state reads")
+            .to_json();
+        assert!(read == filtered, "{}", first_difference(&filtered, &read));
+    }
+
+    /// **The crate's preset identity is the kit's**: what `mxm_preset` writes into the `preset`
+    /// field reads in the crate and writes back the same, for each shape it takes.
+    #[test]
+    fn the_crates_preset_identity_is_the_kits() {
+        use mxm_preset::{LoadedPreset, Origin, PresetIdentity};
+        let identities = [
+            PresetIdentity::none(),
+            PresetIdentity {
+                version: 1,
+                loaded: Some(LoadedPreset {
+                    name: "Long bass".to_owned(),
+                    origin: Origin::Factory,
+                }),
+                baseline: [("aroot".to_owned(), 0.377_952_76)].into_iter().collect(),
+                state_fingerprint: None,
+            },
+            PresetIdentity {
+                version: 1,
+                loaded: Some(LoadedPreset {
+                    name: "Mine".to_owned(),
+                    origin: Origin::User,
+                }),
+                baseline: Default::default(),
+                state_fingerprint: Some(u64::MAX),
+            },
+        ];
+        for identity in identities {
+            let kit = serde_json::to_string(&identity).unwrap();
+            let read: mxm_creative_sampler_state::state::PresetIdentity =
+                serde_json::from_str(&kit).unwrap();
+            assert_eq!(serde_json::to_string(&read).unwrap(), kit);
+        }
     }
 }
 

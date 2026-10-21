@@ -4,9 +4,9 @@ Parent: [`../AGENTS.md`](../AGENTS.md)
 
 # Purpose
 
-This repository's plugin, a CLAP and a VST3: a thin nice-plug shell over the framework-free DSP crate —
-parameters, host contract, event handling and an editor. It keeps the conventions every MXM
-plugin keeps. The full text, with the reasons, measurements and history, is mxm-kit's
+This repository's plugin, a CLAP and a VST3: a thin nice-plug shell over the framework-free DSP and
+state crates — parameters, host contract, event handling and an editor. It keeps the conventions
+every MXM plugin keeps. The full text, with the reasons, measurements and history, is mxm-kit's
 [`docs/plugin-conventions.md`](https://github.com/mxm-audio/mxm-kit/blob/main/docs/plugin-conventions.md);
 this file is their contract, one line per rule, each linking to its section. What is true of this
 machine only lives in its own `AGENTS.md` below.
@@ -14,7 +14,8 @@ machine only lives in its own `AGENTS.md` below.
 # Ownership
 
 - Owns each `plugins/<plugin>/`: `Cargo.toml`, `README.md`, `control-map.json`, `presets/`, `src/`
-  and `host-tests/`. Not the DSP (`crates/<plugin>-dsp`) and not styling (mxm-kit's `mxm-ui`).
+  and `host-tests/`. Not the DSP (`crates/<plugin>-dsp`), not what its state means
+  (`crates/<plugin>-state`) and not styling (mxm-kit's `mxm-ui`).
 - `host-tests/` is the plugin heard through MXM Player, a separate package so `cargo test -p
   <plugin>` (the fast tier) never builds the player. The slow tier: `cargo xtask bundle <plugin>
   --release`, then `cargo test -p <plugin>-host-tests`. [More](https://github.com/mxm-audio/mxm-kit/blob/main/docs/plugin-conventions.md#ownership)

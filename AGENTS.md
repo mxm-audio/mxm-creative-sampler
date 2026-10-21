@@ -122,9 +122,9 @@ Each folder with an `AGENTS.md` owns its contents; the index is below.
 `main`, another product's crates from its repository's `main`, and nice-plug and
 egui-baseview from their MXM forks (`[patch.crates-io]`).
 
-**Two tiers of tests.** `cargo test` builds the plugin and its DSP only — the loop for a
-change. `plugins/mxm-creative-sampler/host-tests` loads the release bundle through MXM Player: it
-is a separate package so the fast tier never builds the player.
+**Two tiers of tests.** `cargo test` builds the plugin, its DSP and its state crate only — the
+loop for a change. `plugins/mxm-creative-sampler/host-tests` loads the release bundle through MXM
+Player: it is a separate package so the fast tier never builds the player.
 
 ## Windows, Linux and macOS — all three, always
 
@@ -143,7 +143,8 @@ breaks another is a broken change. CI builds and tests on all three when started
 | Crate | MSRV | Why |
 |---|---|---|
 | `crates/mxm-creative-sampler-dsp` | **1.88** | Immutable samples, eight voices and the bounded Repitch, Stretch and Grain readers. **Three runtime dependencies**, `mxm-modulation`, `mxm-rng` and `mxm-dsp`, all dependency-free and below this floor — the modulation conversion, the shared generators and the shared guards added them, and `cargo tree` on this crate is what keeps the GUI floor out. **1.88 rather than 1.87** because `lib.rs` uses a `let` chain, which stabilised there |
-| `plugins/mxm-creative-sampler` | **1.95** | Its native-drop editor pulls in egui; depends on `mxm-creative-sampler-dsp`, which stays lower |
+| `crates/mxm-creative-sampler-state` | **1.88** | What a state means — the parameter table, Init, the state's JSON, the import and the mapping onto the DSP — for the plugin and the web tracker alike. **No nice-plug and no egui, and it builds for `wasm32-unknown-unknown`**; its dependencies are the DSP, three dependency-free kit crates and `mxm-audio-file-decode`. 1.88 is the DSP's floor, and `as_chunks`; checked with `cargo +1.88.0 check -p mxm-creative-sampler-state` (2026-10-21) |
+| `plugins/mxm-creative-sampler` | **1.95** | Its native-drop editor pulls in egui; depends on `mxm-creative-sampler-dsp` and `mxm-creative-sampler-state`, which stay lower |
 
 ## Licensing
 
@@ -167,7 +168,8 @@ third-party files, images and verbatim text never do.
 ```bash
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
-cargo test                                   # the fast tier: the plugin and its DSP
+cargo test                                   # the fast tier: the plugin, its DSP and its state
+cargo build -p mxm-creative-sampler-state --target wasm32-unknown-unknown
 cargo xtask bundle mxm-creative-sampler --release
 cargo test -p mxm-creative-sampler-host-tests            # the slow tier: through MXM Player
 ```
@@ -180,5 +182,6 @@ are checked later, together.
 | Doc | Scope |
 |---|---|
 | [`crates/mxm-creative-sampler-dsp/AGENTS.md`](crates/mxm-creative-sampler-dsp/AGENTS.md) | Creative-sampler readers, voices, Character, expression and exact idle |
+| [`crates/mxm-creative-sampler-state/AGENTS.md`](crates/mxm-creative-sampler-state/AGENTS.md) | What a state means, framework-free: the parameter table, Init, the state's JSON and CLAP stream, the payload, the import and its arrival, the mapping onto the DSP |
 | [`plugins/AGENTS.md`](plugins/AGENTS.md) | Shared plugin conventions: nice-plug, the init patch, presets, `process()` rules, the editor contract, and installing a bundle in a DAW |
 | [`plugins/mxm-creative-sampler/AGENTS.md`](plugins/mxm-creative-sampler/AGENTS.md) | Creative-sampler identity, asset transactions, presets, acquisition and editor |

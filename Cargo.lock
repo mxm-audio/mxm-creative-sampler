@@ -2601,6 +2601,7 @@ dependencies = [
  "mxm-audio-file",
  "mxm-audio-file-decode",
  "mxm-creative-sampler-dsp",
+ "mxm-creative-sampler-state",
  "mxm-dsp",
  "mxm-editor",
  "mxm-modulation",
@@ -2608,13 +2609,11 @@ dependencies = [
  "mxm-params",
  "mxm-plugin-test",
  "mxm-preset",
- "mxm-rng",
  "mxm-telemetry",
  "mxm-tempo",
  "mxm-ui",
  "nice-plug",
  "rfd",
- "serde",
  "serde_json",
 ]
 
@@ -2637,6 +2636,21 @@ dependencies = [
  "mxm-audio-file",
  "mxm-player",
  "mxm-player-harness",
+ "serde_json",
+]
+
+[[package]]
+name = "mxm-creative-sampler-state"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "mxm-audio-file",
+ "mxm-audio-file-decode",
+ "mxm-creative-sampler-dsp",
+ "mxm-modulation",
+ "mxm-rng",
+ "mxm-tempo",
+ "serde",
  "serde_json",
 ]
 

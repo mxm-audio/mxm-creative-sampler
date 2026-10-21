@@ -11,10 +11,11 @@ use std::sync::RwLock;
 
 pub use mxm_preset::Library;
 
-/// **The tempo syncs this plugin gained on 2026-09-25** (`plans/plan-tempo-sync-controls.md`). A
-/// preset file written before them was written unsynced, so each loads off rather than keeping the
-/// instance's sync, and without reporting a missing control.
-pub(crate) const TEMPO_SYNC_IDS: &[&str] = &["lfo1sync", "lfo2sync", "agrainsync", "bgrainsync"];
+/// **The tempo syncs this plugin gained on 2026-09-25** (`plans/plan-tempo-sync-controls.md`): the
+/// state crate's `params::TEMPO_SYNC_IDS`. A preset file written before them was written unsynced,
+/// so each loads off rather than keeping the instance's sync, and without reporting a missing
+/// control.
+pub(crate) const TEMPO_SYNC_IDS: &[&str] = &mxm_creative_sampler_state::params::TEMPO_SYNC_IDS;
 
 impl Instrument for MxmCreativeSamplerParams {
     fn clap_id(&self) -> &'static str {

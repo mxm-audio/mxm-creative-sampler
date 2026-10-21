@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
     "crates/mxm-creative-sampler-dsp",
+    "crates/mxm-creative-sampler-state",
     "plugins/mxm-creative-sampler",
     "plugins/mxm-creative-sampler/host-tests",
     "xtask",
@@ -10,6 +11,7 @@ members = [
 # standalone audio backend; `cargo test --workspace` adds the host tests (the slow tier).
 default-members = [
     "crates/mxm-creative-sampler-dsp",
+    "crates/mxm-creative-sampler-state",
     "plugins/mxm-creative-sampler",
     "xtask",
 ]
@@ -29,6 +31,7 @@ egui = "=0.36.1"
 mxm-audio-file = { git = "https://github.com/mxm-audio/mxm-kit", branch = "main" }
 mxm-audio-file-decode = { git = "https://github.com/mxm-audio/mxm-kit", branch = "main" }
 mxm-creative-sampler-dsp = { path = "crates/mxm-creative-sampler-dsp" }
+mxm-creative-sampler-state = { path = "crates/mxm-creative-sampler-state" }
 mxm-dsp = { git = "https://github.com/mxm-audio/mxm-kit", branch = "main" }
 mxm-editor = { git = "https://github.com/mxm-audio/mxm-kit", branch = "main" }
 mxm-measure = { git = "https://github.com/mxm-audio/mxm-kit", branch = "main" }
