@@ -6,7 +6,7 @@ multimode filter.
 
 Part of the MXM collection, the MXM Synth Collection monorepo until the split (2026-10-06): see
 the repository's [README](../../README.md). GPL-3.0-or-later — see the repository's
-[`LICENSE`](../../LICENSE). CLAP only.
+[`LICENSE`](../../LICENSE). A CLAP and a VST®3 plugin.
 
 ## First playable workflow
 
