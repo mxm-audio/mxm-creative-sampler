@@ -110,8 +110,13 @@ impl Instrument for MxmCreativeSamplerParams {
         &self.preset
     }
 
-    fn factory_files(&self) -> &'static [(&'static str, &'static str)] {
+    /// The installed set, but in a unit test, which is loaded from no bundle: the repository's.
+    #[cfg(test)]
+    fn factory_files(&self) -> Vec<(String, String)> {
         FACTORY_FILES
+            .iter()
+            .map(|(name, json)| ((*name).to_owned(), (*json).to_owned()))
+            .collect()
     }
 
     fn default_missing_legacy_parameter(&self, id: &str) -> bool {
@@ -164,21 +169,22 @@ impl Instrument for MxmCreativeSamplerParams {
     }
 }
 
-/// **Four recipes, not a bank.** Each one carries `state = null`, so it keeps whatever the player
-/// has dropped and changes only how the instrument reads it: the S3 listening gate asks for a bass,
-/// a pad, a hit and an evolving texture from the owner's own recordings, and flipping between four
-/// treatments of one sound is the fastest way to hear whether Repitch, Stretch, Grain and Character
-/// are actually different instruments. The authored bank of ≥50 categorised sounds with project
-/// audio behind them is S4 work and waits for the listening verdict.
-pub const FACTORY_FILES: &[(&str, &str)] = &[
-    ("Long bass", include_str!("../presets/long-bass.json")),
-    ("Held pad", include_str!("../presets/held-pad.json")),
-    ("Struck hit", include_str!("../presets/struck-hit.json")),
-    (
-        "Drifting texture",
-        include_str!("../presets/drifting-texture.json"),
-    ),
-];
+/// The factory set as it ships, `(name, json)` in its order: the repository's `presets/`, which
+/// is installed beside the plugin and read there (`mxm_preset::installed_factory_dir`). For the
+/// tests, the integration tests and the audits, which are loaded from no bundle; the plugin itself
+/// never reads it.
+pub static FACTORY_FILES: std::sync::LazyLock<Vec<(&'static str, &'static str)>> =
+    std::sync::LazyLock::new(|| {
+        let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("presets");
+        mxm_preset::read_factory_dir(&folder)
+            .into_iter()
+            .map(|(file, json)| {
+                let name = mxm_preset::Preset::parse(&json, crate::CLAP_ID)
+                    .map_or(file, |preset| preset.name);
+                (&*String::leak(name), &*String::leak(json))
+            })
+            .collect()
+    });
 
 #[cfg(test)]
 mod tests {
@@ -476,7 +482,7 @@ mod tests {
     #[test]
     fn every_recipe_is_complete_categorised_and_carries_no_audio_of_its_own() {
         let params = MxmCreativeSamplerParams::default();
-        for (name, text) in FACTORY_FILES {
+        for (name, text) in FACTORY_FILES.iter() {
             let preset = Preset::parse(text, crate::CLAP_ID).expect(name);
             assert_ne!(preset.category, Category::Uncategorised, "{name}");
             assert!(preset.resolve(&params).1.is_empty(), "{name} is incomplete");

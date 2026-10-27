@@ -162,7 +162,7 @@ fn main() {
     // values in, so what is measured is the sound a player gets when they pick the recipe. The
     // designs in `preset.rs` are `#[cfg(test)]`; these shipped files are what the plugin loads.
     println!("\nfactory recipe renders (digest of the audio, not of the parameters):");
-    for (name, text) in FACTORY_FILES {
+    for (name, text) in FACTORY_FILES.iter() {
         let mut plugin = MxmCreativeSampler::default();
         {
             let params = plugin.params_for_test();
