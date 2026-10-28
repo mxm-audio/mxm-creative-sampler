@@ -22,6 +22,11 @@ impl Instrument for MxmCreativeSamplerParams {
         crate::CLAP_ID
     }
 
+    /// The plugin's version, its `Plugin::VERSION`: its factory presets are installed for it.
+    fn version(&self) -> &'static str {
+        env!("CARGO_PKG_VERSION")
+    }
+
     fn parameters(&self) -> Vec<(&'static str, &dyn mxm_params::ErasedParam)> {
         let mut out: Vec<(&'static str, &dyn mxm_params::ErasedParam)> = vec![
             ("areader", &self.a_reader),
@@ -110,7 +115,7 @@ impl Instrument for MxmCreativeSamplerParams {
         &self.preset
     }
 
-    /// The installed set, but in a unit test, which is loaded from no bundle: the repository's.
+    /// The installed set, but in a unit test the repository's, never the machine's.
     #[cfg(test)]
     fn factory_files(&self) -> Vec<(String, String)> {
         FACTORY_FILES
@@ -170,9 +175,8 @@ impl Instrument for MxmCreativeSamplerParams {
 }
 
 /// The factory set as it ships, `(name, json)` in its order: the repository's `presets/`, which
-/// is installed beside the plugin and read there (`mxm_preset::installed_factory_dir`). For the
-/// tests, the integration tests and the audits, which are loaded from no bundle; the plugin itself
-/// never reads it.
+/// is installed for the plugin's version and read there (`mxm_preset::factory_dir`). For the
+/// tests, the integration tests and the audits; the plugin itself never reads it.
 pub static FACTORY_FILES: std::sync::LazyLock<Vec<(&'static str, &'static str)>> =
     std::sync::LazyLock::new(|| {
         let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("presets");
