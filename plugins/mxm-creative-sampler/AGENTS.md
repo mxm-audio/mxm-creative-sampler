@@ -47,9 +47,9 @@ Product name: `mxm-creative-sampler`; CLAP id: `dk.mxm.mxm-creative-sampler`. `N
 are the state crate's, whose `plugin_name!` is the one literal; `bundler.toml` is the one external
 duplicate, pinned by a test.
 
-**All parameter ids are provisional until the S3 owner listening gate.** The plugin is undistributed
-and this playable surface exists so that gate can happen. Fix the ids and control-map roles in the
-same pass that records approval; do not claim backwards compatibility before then.
+**The parameter ids and control-map roles are permanent**: the owner counts the sampler done (2026-11-17:
+*"the sampler is considerd done a long time ago"*), which is the S3 listening gate's approval. A
+saved state or a host's automation written today opens in every later version of its major.
 
 ## Assets ([NOTES.md § Assets](NOTES.md#assets-acquisition-publication-and-refusal))
 
